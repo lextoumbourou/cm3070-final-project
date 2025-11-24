@@ -5,7 +5,7 @@ This script prepares the CBIS-DDSM dataset for training by:
 1. Loading mass and calcification case descriptions
 2. Extracting ROI crops from the JPEG files
 3. Resizing images to a fixed resolution (256x256)
-4. Splitting data at patient level into train/val/test (70/10/20)
+4. Using the official test split and creating a validation split from training data
 5. Saving processed images and metadata CSVs
 """
 
@@ -34,25 +34,45 @@ OUTPUT_ROOT = Path("datasets/prep/cbis-ddsm")
 IMG_OUTPUT_DIR = OUTPUT_ROOT / "img"
 TARGET_SIZE = (256, 256)
 
+def load_and_combine_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """
+    Load CBIS-DDSM CSVs and keep train/test splits separate
+
+    Returns:
+        Train DataFrame, Test DataFrame, and DICOM info DataFrame
+    """
+    logger.info("Loading CBIS-DDSM metadata files...")
+
+    train_mass = pd.read_csv(CSV_ROOT / "mass_case_description_train_set.csv")
+    test_mass = pd.read_csv(CSV_ROOT / "mass_case_description_test_set.csv")
+    train_calc = pd.read_csv(CSV_ROOT / "calc_case_description_train_set.csv")
+    test_calc = pd.read_csv(CSV_ROOT / "calc_case_description_test_set.csv")
+
+    train_mass['abnormality_category'] = 'mass'
+    test_mass['abnormality_category'] = 'mass'
+    train_calc['abnormality_category'] = 'calcification'
+    test_calc['abnormality_category'] = 'calcification'
+
+    train_df = pd.concat([train_mass, train_calc], ignore_index=True)
+    test_df = pd.concat([test_mass, test_calc], ignore_index=True)
+
+    dicom_info_df = pd.read_csv(CSV_ROOT / "dicom_info.csv")
+
+    logger.info(f"Train cases: {len(train_df)} (Mass: {len(train_mass)}, Calc: {len(train_calc)})")
+    logger.info(f"Test cases: {len(test_df)} (Mass: {len(test_mass)}, Calc: {len(test_calc)})")
+    logger.info(f"Train patients: {train_df['patient_id'].nunique()}")
+    logger.info(f"Test patients: {test_df['patient_id'].nunique()}")
+
+    return train_df, test_df, dicom_info_df
+
+
 def main():
     parser = argparse.ArgumentParser(description="Prepare CBIS-DDSM dataset")
-    parser.add_argument(
-        "--train-ratio",
-        type=float,
-        default=0.7,
-        help="Proportion of patients for training (default: 0.7)"
-    )
     parser.add_argument(
         "--val-ratio",
         type=float,
         default=0.1,
-        help="Proportion of patients for validation (default: 0.1)"
-    )
-    parser.add_argument(
-        "--test-ratio",
-        type=float,
-        default=0.2,
-        help="Proportion of patients for test (default: 0.2)"
+        help="Proportion of training patients for validation (default: 0.1)"
     )
     parser.add_argument(
         "--random-seed",
@@ -65,7 +85,18 @@ def main():
 
     logger.info("Starting CBIS-DDSM dataset preparation...")
     logger.info(f"Target image size: {TARGET_SIZE}")
-    logger.info(f"Split ratios - Train: {args.train_ratio}, Val: {args.val_ratio}, Test: {args.test_ratio}")
+    logger.info(f"Using official test split and creating validation split with ratio: {args.val_ratio}")
+
+    OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+    IMG_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    train_df, test_df, dicom_info_df = load_and_combine_data()
+    print("Train data:")
+    print(train_df)
+    print("\nTest data:")
+    print(test_df)
+    print("\nDICOM info:")
+    print(dicom_info_df)
 
 
 if __name__ == "__main__":
