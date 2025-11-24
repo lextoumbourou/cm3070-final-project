@@ -16,6 +16,10 @@
 kaggle datasets download awsaf49/cbis-ddsm-breast-cancer-image-dataset --path datasets/cbis-ddsm-breast-cancer-image-dataset --unzip
 ```
 
+### Download INBreast
+
+Download from https://drive.google.com/file/d/19n-p9p9C0eCQA1ybm6wkMo-bbeccT_62/view?usp=sharing
+
 ## Notebooks
 
 uv run jupyter lab
