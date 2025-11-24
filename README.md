@@ -27,3 +27,15 @@ uv run jupyter lab
 ### 01-cbis-ddsm
 
 EDA notebook for the CBIS-DDSM data.
+
+## Data Processing
+
+The preparation scripts extract ROI crops, resize images to a fixed resolution (256×256), and split the data at patient level to avoid data leakage.
+
+### Process CBIS-DDSM
+
+Run the CBIS-DDSM preparation script with default settings (70/10/20 train/val/test split):
+
+```bash
+uv run prepare-cbis
+```
