@@ -39,3 +39,11 @@ Run the CBIS-DDSM preparation script with default settings (70/10/20 train/val/t
 ```bash
 uv run prepare-cbis
 ```
+
+## Training
+
+Fine-tune EfficientNet-B0 on the CBIS-DDSM dataset:
+
+```bash
+uv run train
+```

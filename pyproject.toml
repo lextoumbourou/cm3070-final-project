@@ -12,20 +12,26 @@ dependencies = [
     "jupyterlab>=4.5.0",
     "jupytext>=1.18.1",
     "matplotlib>=3.10.7",
-    "pandas>=2.3.3",
+    "pandas>=2.2.1",
     "pydicom>=3.0.1",
-    "pillow>=11.0.0",
-    "numpy>=2.0.0",
+    "pillow>=10.4.0",
+    "numpy==1.26.2",
     "scikit-learn>=1.5.0",
     "mlx>=0.21.0",
     "tqdm>=4.67.0",
+    "mlx-image @ git+https://github.com/riccardomusmeci/mlx-image.git",
+    "torch>=2.9.1",
 ]
 
 [project.scripts]
 prepare-cbis = "src.data.prepare_cbis:main"
+train = "src.trainer:main"
 
 [tool.uv]
 package = true
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
