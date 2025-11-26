@@ -208,8 +208,7 @@ def main():
         num_workers=4
     )
 
-    print("\nLoading EfficientNet-B0 model...")
-    model = create_model("efficientnet_b0", num_classes=NUM_CLASSES)
+    model = create_model("resnet50", num_classes=NUM_CLASSES)
 
     optimizer = optim.Adam(learning_rate=LEARNING_RATE)
 
