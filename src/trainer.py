@@ -9,6 +9,7 @@ from mlxim.data import DataLoader
 from mlxim.data._base import Dataset
 from PIL import Image
 import numpy as np
+import wandb
 
 
 class CSVDataset(Dataset):
@@ -85,7 +86,7 @@ class Trainer:
         accuracy = correct / len(targets)
         return accuracy
 
-    def train_epoch(self, train_loader):
+    def train_epoch(self, train_loader, epoch):
         self.model.train()
         total_loss = 0.0
         total_samples = 0
@@ -101,6 +102,10 @@ class Trainer:
             if (batch_idx + 1) % 10 == 0:
                 avg_loss = total_loss / total_samples
                 print(f"  Batch {batch_idx + 1}: Loss = {avg_loss:.4f}")
+                wandb.log({
+                    "batch": epoch * len(train_loader) + batch_idx,
+                    "train_loss_batch": avg_loss
+                })
 
         avg_loss = total_loss / total_samples
         return {"loss": avg_loss}
@@ -150,13 +155,20 @@ class Trainer:
             print("-" * 50)
 
             # Training
-            train_metrics = self.train_epoch(train_loader)
+            train_metrics = self.train_epoch(train_loader, epoch)
             print(f"Training Loss: {train_metrics['loss']:.4f}")
 
             # Validation
             val_metrics = self.validate(val_loader)
             print(f"Validation Loss: {val_metrics['val_loss']:.4f}")
             print(f"Validation Accuracy: {val_metrics['val_accuracy']:.4f}")
+
+            wandb.log({
+                "epoch": epoch + 1,
+                "train_loss": train_metrics['loss'],
+                "val_loss": val_metrics['val_loss'],
+                "val_accuracy": val_metrics['val_accuracy']
+            })
 
             # Save best model
             if checkpoint_dir and val_metrics['val_loss'] < best_val_loss:
@@ -179,6 +191,21 @@ def main():
     LEARNING_RATE = 1e-4
     IMAGE_SIZE = 224
     NUM_CLASSES = 2
+
+    # Initialize wandb
+    wandb.init(
+        project="cm3070-mammography",
+        config={
+            "batch_size": BATCH_SIZE,
+            "num_epochs": NUM_EPOCHS,
+            "learning_rate": LEARNING_RATE,
+            "image_size": IMAGE_SIZE,
+            "num_classes": NUM_CLASSES,
+            "model": "resnet50",
+            "optimizer": "adam",
+            "dataset": "cbis-ddsm"
+        }
+    )
 
     print("Loading datasets...")
     train_dataset = CSVDataset(
@@ -208,7 +235,7 @@ def main():
         num_workers=4
     )
 
-    model = create_model("resnet50", num_classes=NUM_CLASSES)
+    model = create_model("efficientnet_b0", num_classes=NUM_CLASSES)
 
     optimizer = optim.Adam(learning_rate=LEARNING_RATE)
 
@@ -227,6 +254,7 @@ def main():
     )
 
     print("\nTraining complete!")
+    wandb.finish()
 
 
 if __name__ == "__main__":

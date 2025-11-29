@@ -21,6 +21,7 @@ dependencies = [
     "tqdm>=4.67.0",
     "mlx-image @ git+https://github.com/riccardomusmeci/mlx-image.git",
     "torch>=2.9.1",
+    "wandb>=0.23.0",
 ]
 
 [project.scripts]
