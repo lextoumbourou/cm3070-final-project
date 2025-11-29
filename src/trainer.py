@@ -4,9 +4,15 @@ import csv
 import mlx.core as mx
 import mlx.nn as nn
 import mlx.optimizers as optim
+
+import sys
+# Use vendored mlx-image to path for debugging
+# (I may remove this one I figure out this nan issue)
+sys.path.insert(0, str(Path(__file__).parent.parent / "vendor" / "mlx-image" / "src"))
 from mlxim.model import create_model
 from mlxim.data import DataLoader
 from mlxim.data._base import Dataset
+
 from PIL import Image
 import numpy as np
 import wandb
