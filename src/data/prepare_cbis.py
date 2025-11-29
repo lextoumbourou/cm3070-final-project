@@ -32,7 +32,7 @@ JPEG_ROOT = RAW_DATA_ROOT / "jpeg"
 CSV_ROOT = RAW_DATA_ROOT / "csv"
 OUTPUT_ROOT = Path("datasets/prep/cbis-ddsm")
 IMG_OUTPUT_DIR = OUTPUT_ROOT / "img"
-TARGET_SIZE = (256, 256)
+TARGET_SIZE = (224, 224)
 
 
 def load_and_combine_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:

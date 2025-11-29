@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "vendor" / "mlx-image" / "
 from mlxim.model import create_model
 from mlxim.data import DataLoader
 from mlxim.data._base import Dataset
+from src.model_utils import freeze_backbone
 
 from PIL import Image
 import numpy as np
@@ -147,7 +148,9 @@ class Trainer:
         train_loader,
         val_loader,
         num_epochs: int,
-        checkpoint_dir: Optional[Path] = None
+        checkpoint_dir: Optional[Path] = None,
+        unfreeze_epoch: Optional[int] = None,
+        unfreeze_lr: Optional[float] = None
     ):
         """Train the model for multiple epochs."""
         if checkpoint_dir:
@@ -159,6 +162,13 @@ class Trainer:
         for epoch in range(num_epochs):
             print(f"\nEpoch {epoch + 1}/{num_epochs}")
             print("-" * 50)
+
+            # Unfreeze and lower learning rate if specified
+            if unfreeze_epoch is not None and epoch == unfreeze_epoch:
+                print(f"\n>>> Unfreezing backbone and setting LR to {unfreeze_lr}")
+                self.model.unfreeze()
+                # Reinitialize optimizer with new learning rate for all parameters
+                self.optimizer = optim.Adam(learning_rate=unfreeze_lr)
 
             # Training
             train_metrics = self.train_epoch(train_loader, epoch)
@@ -173,7 +183,8 @@ class Trainer:
                 "epoch": epoch + 1,
                 "train_loss": train_metrics['loss'],
                 "val_loss": val_metrics['val_loss'],
-                "val_accuracy": val_metrics['val_accuracy']
+                "val_accuracy": val_metrics['val_accuracy'],
+                "learning_rate": self.optimizer.learning_rate.item() if hasattr(self.optimizer.learning_rate, 'item') else self.optimizer.learning_rate
             })
 
             # Save best model
@@ -194,7 +205,9 @@ def main():
 
     BATCH_SIZE = 32
     NUM_EPOCHS = 10
-    LEARNING_RATE = 1e-4
+    LEARNING_RATE = 1e-3
+    UNFREEZE_EPOCH = 5  # Unfreeze after this many epochs (0-indexed)
+    UNFREEZE_LR = 1e-5  # Lower LR for fine-tuning
     IMAGE_SIZE = 224
     NUM_CLASSES = 2
 
@@ -205,11 +218,14 @@ def main():
             "batch_size": BATCH_SIZE,
             "num_epochs": NUM_EPOCHS,
             "learning_rate": LEARNING_RATE,
+            "unfreeze_epoch": UNFREEZE_EPOCH,
+            "unfreeze_lr": UNFREEZE_LR,
             "image_size": IMAGE_SIZE,
             "num_classes": NUM_CLASSES,
-            "model": "resnet50",
+            "model": "efficientnet_b0",
             "optimizer": "adam",
-            "dataset": "cbis-ddsm"
+            "dataset": "cbis-ddsm",
+            "frozen_backbone": True
         }
     )
 
@@ -242,6 +258,7 @@ def main():
     )
 
     model = create_model("efficientnet_b0", num_classes=NUM_CLASSES)
+    freeze_backbone(model)
 
     optimizer = optim.Adam(learning_rate=LEARNING_RATE)
 
@@ -252,11 +269,16 @@ def main():
     )
 
     print("\nStarting training...")
+    print(f"Phase 1 (epochs 1-{UNFREEZE_EPOCH}): Training head only with LR={LEARNING_RATE}")
+    print(f"Phase 2 (epochs {UNFREEZE_EPOCH+1}-{NUM_EPOCHS}): Fine-tuning entire model with LR={UNFREEZE_LR}")
+
     trainer.fit(
         train_loader=train_loader,
         val_loader=val_loader,
         num_epochs=NUM_EPOCHS,
-        checkpoint_dir=Path("checkpoints")
+        checkpoint_dir=Path("checkpoints"),
+        unfreeze_epoch=UNFREEZE_EPOCH,
+        unfreeze_lr=UNFREEZE_LR
     )
 
     print("\nTraining complete!")
