@@ -32,7 +32,6 @@ JPEG_ROOT = RAW_DATA_ROOT / "jpeg"
 CSV_ROOT = RAW_DATA_ROOT / "csv"
 OUTPUT_ROOT = Path("datasets/prep/cbis-ddsm")
 IMG_OUTPUT_DIR = OUTPUT_ROOT / "img"
-TARGET_SIZE = (224, 224)
 
 
 def load_and_combine_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -181,9 +180,6 @@ def process_case(
     # Load and process image
     img = Image.open(jpeg_path).convert("L")  # Convert to grayscale
 
-    # Resize to target size
-    img_resized = img.resize(TARGET_SIZE, Image.Resampling.LANCZOS)
-
     # Create output filename
     patient_id = row["patient_id"]
     breast_side = row["left or right breast"]
@@ -195,7 +191,7 @@ def process_case(
     output_path = output_dir / filename
 
     # Save processed image
-    img_resized.save(output_path)
+    img.save(output_path)
 
     # Create metadata entry
     label = 1 if pathology == "MALIGNANT" else 0
