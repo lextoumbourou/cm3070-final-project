@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Dict, Optional
+import argparse
 import csv
 import mlx.core as mx
 import mlx.nn as nn
@@ -197,6 +198,15 @@ class Trainer:
 
 def main():
     """Main training script."""
+    parser = argparse.ArgumentParser(description="Train a model on CBIS-DDSM dataset")
+    parser.add_argument(
+        "--model-name",
+        type=str,
+        help="Name of the model to use",
+        required=True
+    )
+    args = parser.parse_args()
+
     DATA_DIR = Path("datasets/prep/cbis-ddsm")
     IMG_DIR = DATA_DIR / "img"
     TRAIN_CSV = DATA_DIR / "train.csv"
@@ -206,10 +216,13 @@ def main():
     BATCH_SIZE = 32
     NUM_EPOCHS = 10
     LEARNING_RATE = 1e-3
-    UNFREEZE_EPOCH = 5  # Unfreeze after this many epochs (0-indexed)
-    UNFREEZE_LR = 1e-5  # Lower LR for fine-tuning
+    # Unfreeze after this many epochs (0-indexed)
+    UNFREEZE_EPOCH = 2
+    # Lower LR for fine-tuning
+    UNFREEZE_LR = 1e-5
     IMAGE_SIZE = 224
     NUM_CLASSES = 2
+    MODEL_NAME = args.model_name
 
     # Initialize wandb
     wandb.init(
@@ -222,7 +235,7 @@ def main():
             "unfreeze_lr": UNFREEZE_LR,
             "image_size": IMAGE_SIZE,
             "num_classes": NUM_CLASSES,
-            "model": "efficientnet_b0",
+            "model": MODEL_NAME,
             "optimizer": "adam",
             "dataset": "cbis-ddsm",
             "frozen_backbone": True
@@ -257,7 +270,7 @@ def main():
         num_workers=4
     )
 
-    model = create_model("efficientnet_b0", num_classes=NUM_CLASSES)
+    model = create_model(MODEL_NAME, num_classes=NUM_CLASSES)
     freeze_backbone(model)
 
     optimizer = optim.Adam(learning_rate=LEARNING_RATE)
