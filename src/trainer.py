@@ -348,6 +348,37 @@ def main():
     )
 
     print("\nTraining complete!")
+
+    print("\nRunning inference on test set...")
+    test_dataset = CSVDataset(
+        csv_path=str(TEST_CSV),
+        img_dir=str(IMG_DIR),
+        image_size=IMAGE_SIZE
+    )
+    print(f"Test samples: {len(test_dataset)}")
+
+    test_loader = DataLoader(
+        dataset=test_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=4
+    )
+
+    best_checkpoint = Path("checkpoints") / "best_model.npz"
+    if best_checkpoint.exists():
+        print(f"Loading best model from {best_checkpoint}")
+        model.load_weights(str(best_checkpoint))
+
+    test_metrics = trainer.validate(test_loader)
+    print(f"\nTest Results:")
+    print(f"  Test Loss: {test_metrics['val_loss']:.4f}")
+    print(f"  Test Accuracy: {test_metrics['val_accuracy']:.4f}")
+
+    wandb.log({
+        "test_loss": test_metrics['val_loss'],
+        "test_accuracy": test_metrics['val_accuracy']
+    })
+
     wandb.finish()
 
 
