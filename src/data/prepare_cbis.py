@@ -3,20 +3,19 @@ CBIS-DDSM dataset preparation script
 
 This script prepares the CBIS-DDSM dataset for training by:
 1. Loading mass and calcification case descriptions
-2. Extracting ROI crops from the JPEG files
-3. Resizing images to a fixed resolution (256x256)
-4. Using the official test split and creating a validation split from training data
-5. Saving processed images and metadata CSVs
+2. Preprocessing full mammogram images (crop, normalize, CLAHE)
+3. Using the official test split and creating a validation split from training data
+4. Saving processed images and metadata CSVs
 """
 
 from pathlib import Path
 from typing import Tuple
 import argparse
 import logging
-from pydantic import BaseModel
 
 import pandas as pd
 import numpy as np
+import cv2
 from PIL import Image
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
@@ -26,6 +25,8 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+TARGET_SIZE = 512
 
 RAW_DATA_ROOT = Path("datasets/cbis-ddsm-breast-cancer-image-dataset")
 JPEG_ROOT = RAW_DATA_ROOT / "jpeg"
@@ -101,40 +102,67 @@ def split_by_patient(
     return train_df, val_df
 
 
-class ImageInfo(BaseModel):
-    subject_id: str
-    study_uid: str
-    series_uid: str
-    img_idx: int
+def get_img_id_from_dcm_file(path: str) -> str:
+    return str(path).split("/")[1]
 
-def get_img_info_from_dcm_file(path: Path) -> ImageInfo:
-    path_parts = str(path).split("/")
-    subject_id = path_parts[0]
-    study_uid = path_parts[1]
-    series_uid = path_parts[2]
-    img_idx = int(path_parts[-1].strip().replace(".dcm", "")[-1])
-
-    return ImageInfo(
-        subject_id=subject_id,
-        study_uid=study_uid,
-        series_uid=series_uid,
-        img_idx=img_idx,
-    )
 
 def get_jpg_path(img_file_path: str):
     return JPEG_ROOT / img_file_path.replace("CBIS-DDSM/jpeg/", "")
 
 
-def get_cropped_img_from_roi_path(mask_img_path: Path) -> Path:
-    parent_dir = mask_img_path.parent 
-    files = list(parent_dir.glob("*.jpg"))
-    if not files:
-        import pdb; pdb.set_trace()
-    filtered_files = [f for f in files if f.name.startswith("2-")]
-    if not filtered_files:
-        import pdb; pdb.set_trace()
-    crop = filtered_files[0]
-    return crop
+def get_img_path(img_path: str, dicom_info_df: pd.DataFrame) -> Path:
+    img_file = get_img_id_from_dcm_file(img_path)
+    dicom_row = dicom_info_df[dicom_info_df.StudyInstanceUID == img_file].iloc[0]
+    return get_jpg_path(dicom_row.image_path)
+
+
+def apply_morphological_transforms(thresh_frame, iterations: int = 2):
+    kernel = np.ones((100, 100), np.uint8)
+    opened_mask = cv2.morphologyEx(thresh_frame, cv2.MORPH_OPEN, kernel)
+    closed_mask = cv2.morphologyEx(opened_mask, cv2.MORPH_CLOSE, kernel, iterations=iterations)
+    return closed_mask
+
+
+def get_contours_from_mask(mask):
+    cnts, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cnt = max(cnts, key=cv2.contourArea)
+    x, y, w, h = cv2.boundingRect(cnt)
+    return (x, y, w, h)
+
+
+def crop_coords(img):
+    sample_img = np.array(img.convert('L'))
+    blur = cv2.GaussianBlur(sample_img, (5, 5), 0)
+    _, breast_mask = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    morph_img = apply_morphological_transforms(breast_mask)
+    return get_contours_from_mask(morph_img)
+
+
+def truncation_normalisation(img):
+    Pmin = np.percentile(img[img != 0], 5)
+    Pmax = np.percentile(img[img != 0], 99)
+    truncated = np.clip(img, Pmin, Pmax)
+    normalized = (truncated - Pmin) / (Pmax - Pmin)
+    normalized[img == 0] = 0
+    return normalized
+
+
+def clahe(img, clip):
+    clahe_obj = cv2.createCLAHE(clipLimit=clip)
+    cl = clahe_obj.apply(np.array(img * 255, dtype=np.uint8))
+    return cl
+
+
+def preprocess_mammogram(img, target_size=TARGET_SIZE):
+    x, y, w, h = crop_coords(img)
+    sample_img = np.array(img.convert('L'))
+    img_cropped = sample_img[y:y+h, x:x+w]
+    img_normalized = truncation_normalisation(img_cropped)
+    cl1 = clahe(img_normalized, 1.0)
+    cl2 = clahe(img_normalized, 2.0)
+    img_final = cv2.merge((np.array(img_normalized * 255, dtype=np.uint8), cl1, cl2))
+    img_final = cv2.resize(img_final, (target_size, target_size))
+    return img_final
 
 def process_case(
     row: pd.Series,
@@ -143,57 +171,35 @@ def process_case(
     output_dir: Path,
     case_idx: int,
 ) -> dict:
-    """
-    Process a single case: load image, extract ROI, resize, and save
+    image_path_str = row["image file path"]
 
-    Args:
-        row: Row from the case description CSV
-        dicom_info_df: DICOM metadata DataFrame
-        abnormality_category: 'mass' or 'calcification'
-        output_dir: Directory to save processed images
-        case_idx: Index to ensure unique filenames
-
-    Returns:
-        Dictionary with case metadata
-    """
-    # Get image path
-    image_path_str = row["cropped image file path"]
-    img_info = get_img_info_from_dcm_file(image_path_str)
-
-    # Match with dicom_info to get the JPEG path
-    dicom_row = dicom_info_df[
-        (dicom_info_df["PatientID"] == img_info.subject_id)
-        & (dicom_info_df["StudyInstanceUID"] == img_info.study_uid)
-        & (dicom_info_df["SeriesInstanceUID"] == img_info.series_uid)
-        & (dicom_info_df["SeriesDescription"] == 'cropped images')
-    ]
-
-    if len(dicom_row) != 1:
+    try:
+        jpeg_path = get_img_path(image_path_str, dicom_info_df)
+    except (IndexError, KeyError):
         logger.warning(f"No DICOM match found for: {image_path_str}")
         return None
 
-    jpeg_path = get_jpg_path(dicom_row.iloc[0].image_path)
     if not jpeg_path.exists():
         logger.warning(f"Image file not found: {jpeg_path}")
         return None
 
-    # Load and process image
-    img = Image.open(jpeg_path).convert("L")  # Convert to grayscale
+    try:
+        img = Image.open(jpeg_path)
+        img_processed = preprocess_mammogram(img)
+    except Exception as e:
+        logger.warning(f"Failed to preprocess {jpeg_path}: {e}")
+        return None
 
-    # Create output filename
     patient_id = row["patient_id"]
     breast_side = row["left or right breast"]
     image_view = row["image view"]
     pathology = row["pathology"]
 
-    # Create a unique filename with case index
     filename = f"{case_idx:05d}_{patient_id}_{breast_side}_{image_view}_{abnormality_category}_{pathology}.png"
     output_path = output_dir / filename
 
-    # Save processed image
-    img.save(output_path)
+    cv2.imwrite(str(output_path), cv2.cvtColor(img_processed, cv2.COLOR_RGB2BGR))
 
-    # Create metadata entry
     label = 1 if pathology == "MALIGNANT" else 0
 
     metadata = {

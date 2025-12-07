@@ -17,7 +17,53 @@ from src.model_utils import freeze_backbone
 
 from PIL import Image
 import numpy as np
+import cv2
+import albumentations as A
 import wandb
+
+
+def get_train_transform(image_size: int = 512):
+    """Get training augmentation pipeline."""
+    return A.Compose([
+        # Crops
+        A.RandomSizedCrop(min_max_height=(256, 480), size=(image_size, image_size), p=0.4),
+
+        # Flips
+        A.HorizontalFlip(p=0.5),
+        A.VerticalFlip(p=0.5),
+
+        # Downscale - simulates lower resolution acquisitions
+        A.OneOf([
+            A.Downscale(scale_range=(0.75, 0.95), interpolation_pair={'downscale': cv2.INTER_AREA, 'upscale': cv2.INTER_LINEAR}, p=0.1),
+            A.Downscale(scale_range=(0.75, 0.95), interpolation_pair={'downscale': cv2.INTER_AREA, 'upscale': cv2.INTER_LANCZOS4}, p=0.1),
+            A.Downscale(scale_range=(0.75, 0.95), interpolation_pair={'downscale': cv2.INTER_LINEAR, 'upscale': cv2.INTER_LINEAR}, p=0.8),
+        ], p=0.125),
+
+        # Contrast - simulates exposure variations
+        A.OneOf([
+            A.RandomToneCurve(scale=0.3, p=0.5),
+            A.RandomBrightnessContrast(brightness_limit=(-0.1, 0.2), contrast_limit=(-0.4, 0.5),
+            brightness_by_max=True, p=0.5)
+        ], p=0.5),
+
+        # Geometric - simulates positioning variations
+        A.OneOf([
+            A.Affine(
+                scale=(0.85, 1.15), rotate=(-30, 30),
+                translate_percent={'x': (-0.1, 0.1), 'y': (-0.2, 0.2)},
+                border_mode=cv2.BORDER_CONSTANT,
+                p=0.6
+            ),
+            A.ElasticTransform(
+                alpha=1, sigma=20, interpolation=cv2.INTER_LINEAR,
+                border_mode=cv2.BORDER_CONSTANT, approximate=False, p=0.2
+            ),
+            A.GridDistortion(
+                num_steps=5, distort_limit=0.3, interpolation=cv2.INTER_LINEAR,
+                border_mode=cv2.BORDER_CONSTANT, normalized=True, p=0.2
+            ),
+        ], p=0.5),
+    ], p=0.9)
 
 
 class CSVDataset(Dataset):
@@ -52,10 +98,14 @@ class CSVDataset(Dataset):
         # Load and preprocess image
         img = Image.open(img_path).convert('RGB')
         img = img.resize((self.image_size, self.image_size))
-        img = np.array(img).astype(np.float32) / 255.0
+        img = np.array(img).astype(np.uint8)
 
+        # Apply albumentations transform (expects uint8, returns uint8)
         if self.transform:
-            img = self.transform(img)
+            img = self.transform(image=img)['image']
+
+        # Normalize to float32 [0, 1]
+        img = img.astype(np.float32) / 255.0
 
         img = mx.array(img)
         label = mx.array(label)
@@ -238,14 +288,17 @@ def main():
             "model": MODEL_NAME,
             "optimizer": "adam",
             "dataset": "cbis-ddsm",
-            "frozen_backbone": True
+            "frozen_backbone": True,
+            "augmentation": True
         }
     )
 
     print("Loading datasets...")
+    train_transform = get_train_transform(image_size=IMAGE_SIZE)
     train_dataset = CSVDataset(
         csv_path=str(TRAIN_CSV),
         img_dir=str(IMG_DIR),
+        transform=train_transform,
         image_size=IMAGE_SIZE
     )
     val_dataset = CSVDataset(
