@@ -20,6 +20,7 @@
 
 # %%
 from pathlib import Path
+import re
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -43,6 +44,98 @@ import pydicom
 # %%
 INBREAST_ROOT = Path("../datasets/INbreast Release 1.0")
 
+# %% [markdown]
+# ## ROI File Parsing
+#
+# The ROI files are in Apple/NeXT typedstream binary format. We need to extract
+# the coordinate points that define the region of interest boundaries.
+
+# %%
+def parse_roi_file(roi_path):
+    """
+    Parse an INbreast ROI file and extract coordinate points.
+
+    The ROI files are in Apple/NeXT typedstream binary format containing
+    NSKeyedArchiver serialized objects with coordinate points.
+
+    Args:
+        roi_path: Path to the .roi file
+
+    Returns:
+        dict with:
+            - 'points': List of (x, y) tuples representing the ROI boundary
+            - 'roi_type': Type of ROI (e.g., 'Mass')
+            - 'raw_data': Raw bytes for debugging
+    """
+    if not roi_path.exists():
+        return None
+
+    # Read the binary file
+    file_bytes = roi_path.read_bytes()
+
+    # Convert bytes to string (ignoring errors for binary data)
+    file_str = file_bytes.decode('latin-1')
+
+    # Extract coordinate points using regex
+    # Points are in format {x, y}
+    coord_pattern = r'\{([\d.-]+),\s*([\d.-]+)\}'
+    matches = re.findall(coord_pattern, file_str)
+
+    # Convert string coordinates to float tuples
+    points = [(float(x), float(y)) for x, y in matches if not (float(x) == 0 and float(y) == 0)]
+
+    # Try to extract ROI type (e.g., "Mass", "Calcification")
+    roi_type = None
+    type_patterns = ['Mass', 'Calcification', 'Cluster', 'Distortion']
+    for pattern in type_patterns:
+        if pattern in file_str:
+            roi_type = pattern
+            break
+
+    return {
+        'points': points,
+        'roi_type': roi_type,
+        'num_points': len(points),
+        'raw_bytes': file_bytes
+    }
+
+# %%
+def load_roi_for_image(file_name, roi_dir):
+    """
+    Load ROI data for a specific image file.
+
+    Args:
+        file_name: Image file name (without extension)
+        roi_dir: Path to the AllROI directory
+
+    Returns:
+        Parsed ROI data or None if not found
+    """
+    roi_file = roi_dir / f"{file_name}.roi"
+    if roi_file.exists():
+        return parse_roi_file(roi_file)
+    return None
+
+# %%
+def get_all_rois(inbreast_df, roi_dir):
+    """
+    Load all ROI files for images in the dataframe.
+
+    Args:
+        inbreast_df: DataFrame with INbreast metadata
+        roi_dir: Path to the AllROI directory
+
+    Returns:
+        Dictionary mapping file names to ROI data
+    """
+    rois = {}
+    for _, row in inbreast_df.iterrows():
+        file_name = str(row['File Name'])
+        roi_data = load_roi_for_image(file_name, roi_dir)
+        if roi_data:
+            rois[file_name] = roi_data
+    return rois
+
 # %%
 inbreast_df = pd.read_csv(INBREAST_ROOT / "INbreast.csv", sep=";")
 inbreast_df.head()
@@ -57,6 +150,158 @@ print(f"\nDataset shape: {inbreast_df.shape}")
 print("Columns:")
 for col in inbreast_df.columns:
     print(f"  - {col}")
+
+# %% [markdown]
+# ## Image Extraction and Visualization
+#
+# Let's look at how to load and display DICOM images from the INbreast dataset.
+
+# %% [markdown]
+# We know from the paper, that
+#
+# Mammography comprehends the recording of two views for each breast:
+# - the craniocaudal (CC) view, which is a top to bottom view
+# - mediolateral oblique (MLO) view, which is a side view
+#
+# I'll take a look at one example of each.
+
+# %%
+# Get a sample image
+sample_row = inbreast_df[inbreast_df.View == "MLO"].iloc[0]
+sample_filename = sample_row['File Name']
+print(f"Sample image filename: {sample_filename}")
+
+# %%
+sample_row
+
+# %%
+# Construct the DICOM file path
+dicom_path = files = list((INBREAST_ROOT / "AllDICOMs").rglob(f"{sample_filename}*.dcm"))[0]
+print(f"DICOM path: {dicom_path}")
+print(f"File exists: {dicom_path.exists()}")
+
+# %%
+# Load the DICOM file
+if dicom_path.exists():
+    dicom_data = pydicom.dcmread(dicom_path)
+    img_array = dicom_data.pixel_array
+
+    # Display the image
+    plt.figure(figsize=(10, 10))
+    plt.imshow(img_array, cmap='gray')
+    plt.title(f"Sample Image - {sample_filename}\nBI-RADS: {sample_row['Bi-Rads']}, ACR: {sample_row['ACR']}")
+    plt.axis('off')
+    plt.show()
+
+    print(f"Image shape: {img_array.shape}")
+    print(f"Pixel value range: [{img_array.min()}, {img_array.max()}]")
+
+# %%
+file_name = sample_row["File Name"]
+file_name
+
+# %%
+roi_file = INBREAST_ROOT / "AllROI" / (str(file_name) + ".roi")
+print(f"ROI file: {roi_file}")
+print(f"ROI file exists: {roi_file.exists()}")
+
+# %% [markdown]
+# ### Parse and visualize region-of-interest
+
+# %%
+# Parse the ROI file
+if roi_file.exists():
+    roi_data = parse_roi_file(roi_file)
+    if roi_data:
+        print(f"ROI Type: {roi_data['roi_type']}")
+        print(f"Number of points: {roi_data['num_points']}")
+        print(f"\nFirst 5 points:")
+        for i, (x, y) in enumerate(roi_data['points'][:5]):
+            print(f"  Point {i}: ({x:.2f}, {y:.2f})")
+    else:
+        print("Failed to parse ROI file")
+else:
+    print("ROI file not found")
+
+# %%
+# Visualize the DICOM image with ROI overlay
+if dicom_path.exists() and roi_file.exists() and roi_data:
+    fig, ax = plt.subplots(figsize=(12, 12))
+
+    # Display the mammogram
+    ax.imshow(img_array, cmap='gray')
+
+    # Overlay the ROI
+    if roi_data['points']:
+        roi_points = np.array(roi_data['points'])
+        # Close the polygon by connecting last point to first
+        roi_points = np.vstack([roi_points, roi_points[0]])
+
+        ax.plot(roi_points[:, 0], roi_points[:, 1], 'r-', linewidth=2, label='ROI boundary')
+        ax.plot(roi_points[:, 0], roi_points[:, 1], 'r.', markersize=4)
+
+    ax.set_title(f"Image: {sample_filename} | BI-RADS: {sample_row['Bi-Rads']} | ROI Type: {roi_data['roi_type']}")
+    ax.legend()
+    ax.axis('off')
+    plt.tight_layout()
+    plt.show()
+
+# %%
+# Visualize with bounding box
+if dicom_path.exists() and roi_file.exists() and roi_data:
+    fig, ax = plt.subplots(figsize=(12, 12))
+
+    # Display the mammogram
+    ax.imshow(img_array, cmap='gray')
+
+    # Overlay the bounding box
+    if roi_data['points']:
+        roi_points = np.array(roi_data['points'])
+
+        # Calculate bounding box
+        x_min, y_min = roi_points.min(axis=0)
+        x_max, y_max = roi_points.max(axis=0)
+
+        # Draw the bounding box
+        from matplotlib.patches import Rectangle
+        bbox = Rectangle((x_min, y_min), x_max - x_min, y_max - y_min,
+                        linewidth=3, edgecolor='yellow', facecolor='none',
+                        label='Bounding box')
+        ax.add_patch(bbox)
+
+    ax.set_title(f"Image: {sample_filename} | Bounding Box around ROI")
+    ax.legend()
+    ax.axis('off')
+    plt.tight_layout()
+    plt.show()
+
+# %%
+# Get a sample image
+sample_row = inbreast_df[inbreast_df.View == "CC"].iloc[0]
+sample_filename = sample_row['File Name']
+print(f"Sample image filename: {sample_filename}")
+
+# %%
+# Construct the DICOM file path
+dicom_path = files = list((INBREAST_ROOT / "AllDICOMs").rglob(f"{sample_filename}*.dcm"))[0]
+print(f"DICOM path: {dicom_path}")
+print(f"File exists: {dicom_path.exists()}")
+
+# %%
+# Load the DICOM file
+if dicom_path.exists():
+    dicom_data = pydicom.dcmread(dicom_path)
+    img_array = dicom_data.pixel_array
+
+    # Display the image
+    plt.figure(figsize=(10, 10))
+    plt.imshow(img_array, cmap='gray')
+    plt.title(f"Sample Image - {sample_filename}\nBI-RADS: {sample_row['Bi-Rads']}, ACR: {sample_row['ACR']}")
+    plt.axis('off')
+    plt.show()
+
+    print(f"Image shape: {img_array.shape}")
+    print(f"Pixel value range: [{img_array.min()}, {img_array.max()}]")
 
 # %% [markdown]
 # ## EDA
@@ -218,40 +463,30 @@ plt.tight_layout()
 plt.show()
 
 # %% [markdown]
-# ## Image Extraction and Visualization
 #
-# Let's look at how to load and display DICOM images from the INbreast dataset.
 
 # %%
-# Get a sample image
-sample_row = inbreast_df.iloc[1]
-sample_filename = sample_row['File Name']
-print(f"Sample image filename: {sample_filename}")
 
 # %%
-sample_row
 
 # %%
-# Construct the DICOM file path
-dicom_path = files = list((INBREAST_ROOT / "AllDICOMs").rglob(f"{sample_filename}*.dcm"))[0]
-print(f"DICOM path: {dicom_path}")
-print(f"File exists: {dicom_path.exists()}")
 
 # %%
-# Load the DICOM file
-if dicom_path.exists():
-    dicom_data = pydicom.dcmread(dicom_path)
-    img_array = dicom_data.pixel_array
 
-    # Display the image
-    plt.figure(figsize=(10, 10))
-    plt.imshow(img_array, cmap='gray')
-    plt.title(f"Sample Image - {sample_filename}\nBI-RADS: {sample_row['Bi-Rads']}, ACR: {sample_row['ACR']}")
-    plt.axis('off')
-    plt.show()
+# %%
 
-    print(f"Image shape: {img_array.shape}")
-    print(f"Pixel value range: [{img_array.min()}, {img_array.max()}]")
+# %%
+
+# %% [markdown]
+#
+
+# %%
+
+# %%
+
+# %%
+
+# %%
 
 # %% [markdown]
 # ## Questions

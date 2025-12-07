@@ -89,8 +89,13 @@ test_set_calc_df.patient_id.nunique() + train_set_calc_df.patient_id.nunique()
 patient_5 = train_set_calc_df[train_set_calc_df.patient_id == "P_00005"]
 
 # %%
-patient_5.iloc[0]
+patient_5
 
+
+# %% [markdown]
+# For this patient, we have a mammography for a single breast, with the expected two views:
+# - CC - a top-to-bottom view.
+# - MLO - a side view.
 
 # %% [markdown]
 # ## Image Extraction
@@ -114,51 +119,64 @@ def get_img_id_from_dcm_file(path: Path):
 # ### Fetch img file path
 
 # %% [markdown]
-# Now to fetch the id for the "image file path":
-
-# %%
-patient_5_img_file = patient_5.iloc[0]["image file path"]
-patient_5_img_file
-
-# %%
-patient_5_img_id = get_img_id_from_dcm_file(patient_5_img_file)
-patient_5_img_id
-
-# %%
-dicom_5_row = dicom_info_df[dicom_info_df.StudyInstanceUID == patient_5_img_id].iloc[0]
-dicom_5_row.image_path
+# From some manual exploration, I put together a function that extracts the image file given a row from the dataset.
 
 # %%
 JPEG_ROOT = Path("../datasets/cbis-ddsm-breast-cancer-image-dataset/jpeg")
-
-
-# %% [markdown]
-# Now a function to normalise the JPEG path to use my path:
-
-# %%
 def get_jpg_path(img_file_path: str):
     return JPEG_ROOT / img_file_path.replace("CBIS-DDSM/jpeg/", "")
 
-
-# %%
-patient_img = Image.open(get_jpg_path(dicom_5_row.image_path))
-
-# %%
-plt.imshow(patient_img, cmap="grey")
-
-
-# %% [markdown]
-# Now to wrap all that in a single function.
-
-# %%
 def get_img_path(img_path):
     img_file = get_img_id_from_dcm_file(img_path)
     dicom_row = dicom_info_df[dicom_info_df.StudyInstanceUID == img_file].iloc[0]
     return get_jpg_path(dicom_row.image_path)
 
+def get_patient_img(image_file_path):
+    return Image.open(get_img_path(image_file_path))
+
+
+def show_img_grid(cc_img, mlo_img):
+    fig, axes = plt.subplots(1, 2, figsize=(8, 4))
+    
+    axes[0].imshow(cc_img, cmap='gray')
+    axes[0].set_title('CC View')
+    axes[0].axis('off')
+    
+    axes[1].imshow(mlo_img, cmap='gray')
+    axes[1].set_title('MLO View')
+    axes[1].axis('off')
+    
+    plt.tight_layout()
+    plt.show()
+
+
+# %%
+cc_img = get_patient_img(patient_5.iloc[0]["image file path"])
+mlo_img = get_patient_img(patient_5.iloc[1]["image file path"])
+
+# %%
+show_img_grid(cc_img, mlo_img)
+
+# %% [markdown]
+# And another example:
+
+# %%
+patient_02033 = train_set_mass_df[train_set_mass_df.patient_id == "P_02033"].reset_index(drop=True)
+patient_02033
+
+# %%
+cc_img = get_patient_img(patient_02033[patient_02033["image view"] == "CC"].iloc[0]["image file path"])
+mlo_img = get_patient_img(patient_02033[patient_02033["image view"] == "MLO"].iloc[0]["image file path"])
+show_img_grid(cc_img, mlo_img)
+
+# %% [markdown]
+# At this point, I'd like to know, do all patients have both images, or are there some patients with an incomplete mammogram?
 
 # %% [markdown]
 # ### Fetch ROI mask file path
+
+# %% [markdown]
+#
 
 # %%
 mask_img_path = get_img_path(patient_5.iloc[0]["ROI mask file path"])
