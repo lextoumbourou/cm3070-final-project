@@ -91,7 +91,6 @@ patient_5 = train_set_calc_df[train_set_calc_df.patient_id == "P_00005"]
 # %%
 patient_5
 
-
 # %% [markdown]
 # For this patient, we have a mammography for a single breast, with the expected two views:
 # - CC - a top-to-bottom view.
@@ -111,9 +110,6 @@ patient_5
 # Firstly, need a function to extract the Dicom id from the path
 
 # %%
-def get_img_id_from_dcm_file(path: Path):
-    return str(path).split("/")[1]
-
 
 # %% [markdown]
 # ### Fetch img file path
@@ -123,6 +119,10 @@ def get_img_id_from_dcm_file(path: Path):
 
 # %%
 JPEG_ROOT = Path("../datasets/cbis-ddsm-breast-cancer-image-dataset/jpeg")
+
+def get_img_id_from_dcm_file(path: Path):
+    return str(path).split("/")[1]
+
 def get_jpg_path(img_file_path: str):
     return JPEG_ROOT / img_file_path.replace("CBIS-DDSM/jpeg/", "")
 
