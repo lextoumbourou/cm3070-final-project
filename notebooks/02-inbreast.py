@@ -773,10 +773,3 @@ plt.show()
 # Print statistics
 print(f"Before: min={pixels_before.min()}, max={pixels_before.max()}, mean={pixels_before.mean():.1f}, std={pixels_before.std():.1f}")
 print(f"After:  min={pixels_after.min():.3f}, max={pixels_after.max():.3f}, mean={pixels_after.mean():.3f}, std={pixels_after.std():.3f}")
-
-# %% [markdown]
-# ## Questions
-#
-# How do I find images across patients?
-#
-#
