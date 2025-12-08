@@ -255,6 +255,18 @@ def main():
         help="Name of the model to use",
         required=True
     )
+    parser.add_argument(
+        "--run-name",
+        type=str,
+        help="Name for this training run (used for checkpoint directory)",
+        required=True
+    )
+    parser.add_argument(
+        "--weights",
+        type=str,
+        help="Path to pretrained weights (.npz) to load before training",
+        default=None
+    )
     args = parser.parse_args()
 
     DATA_DIR = Path("datasets/prep/cbis-ddsm")
@@ -277,6 +289,7 @@ def main():
     # Initialize wandb
     wandb.init(
         project="cm3070-mammography",
+        name=args.run_name,
         config={
             "batch_size": BATCH_SIZE,
             "num_epochs": NUM_EPOCHS,
@@ -289,7 +302,9 @@ def main():
             "optimizer": "adam",
             "dataset": "cbis-ddsm",
             "frozen_backbone": True,
-            "augmentation": True
+            "augmentation": True,
+            "pretrained_weights": args.weights,
+            "run_name": args.run_name
         }
     )
 
@@ -324,6 +339,9 @@ def main():
     )
 
     model = create_model(MODEL_NAME, num_classes=NUM_CLASSES)
+    if args.weights:
+        print(f"Loading weights from {args.weights}")
+        model.load_weights(args.weights)
     freeze_backbone(model)
 
     optimizer = optim.Adam(learning_rate=LEARNING_RATE)
@@ -342,7 +360,7 @@ def main():
         train_loader=train_loader,
         val_loader=val_loader,
         num_epochs=NUM_EPOCHS,
-        checkpoint_dir=Path("checkpoints"),
+        checkpoint_dir=Path("checkpoints") / args.run_name,
         unfreeze_epoch=UNFREEZE_EPOCH,
         unfreeze_lr=UNFREEZE_LR
     )
