@@ -463,30 +463,316 @@ plt.tight_layout()
 plt.show()
 
 # %% [markdown]
+# ### Image Dimensions Analysis
 #
+# Analyze the height and width distribution of images across the dataset.
 
 # %%
+from tqdm import tqdm
+
+def get_image_dimensions(df, dicom_dir, desc="Processing"):
+    """Extract image dimensions for all DICOM images in a dataframe."""
+    dimensions = []
+    for _, row in tqdm(df.iterrows(), total=len(df), desc=desc):
+        try:
+            file_name = str(row['File Name'])
+            dicom_files = list(dicom_dir.rglob(f"{file_name}*.dcm"))
+            if dicom_files:
+                dicom_data = pydicom.dcmread(dicom_files[0])
+                height, width = dicom_data.pixel_array.shape
+                dimensions.append({
+                    "patient_id": row["Patient ID"],
+                    "file_name": file_name,
+                    "view": row["View"],
+                    "width": width,
+                    "height": height,
+                    "aspect_ratio": width / height
+                })
+        except Exception as e:
+            print(f"Error processing {row['File Name']}: {e}")
+    return pd.DataFrame(dimensions)
 
 # %%
+dicom_dir = INBREAST_ROOT / "AllDICOMs"
+dimensions_df = get_image_dimensions(inbreast_df, dicom_dir, desc="Analysing image dimensions")
 
 # %%
+fig, axes = plt.subplots(1, 3, figsize=(18, 5))
 
-# %%
+# Width distribution
+axes[0].hist(dimensions_df['width'], bins=50, color='#3498db', edgecolor='black', alpha=0.7)
+axes[0].set_title('Image Width Distribution', fontsize=12, fontweight='bold')
+axes[0].set_xlabel('Width (pixels)')
+axes[0].set_ylabel('Count')
+axes[0].axvline(dimensions_df['width'].median(), color='red', linestyle='--',
+                label=f"Median: {dimensions_df['width'].median():.0f}")
+axes[0].legend()
 
-# %%
+# Height distribution
+axes[1].hist(dimensions_df['height'], bins=50, color='#2ecc71', edgecolor='black', alpha=0.7)
+axes[1].set_title('Image Height Distribution', fontsize=12, fontweight='bold')
+axes[1].set_xlabel('Height (pixels)')
+axes[1].set_ylabel('Count')
+axes[1].axvline(dimensions_df['height'].median(), color='red', linestyle='--',
+                label=f"Median: {dimensions_df['height'].median():.0f}")
+axes[1].legend()
 
-# %%
+# Aspect ratio distribution
+axes[2].hist(dimensions_df['aspect_ratio'], bins=50, color='#9b59b6', edgecolor='black', alpha=0.7)
+axes[2].set_title('Aspect Ratio Distribution (Width/Height)', fontsize=12, fontweight='bold')
+axes[2].set_xlabel('Aspect Ratio')
+axes[2].set_ylabel('Count')
+axes[2].axvline(dimensions_df['aspect_ratio'].median(), color='red', linestyle='--',
+                label=f"Median: {dimensions_df['aspect_ratio'].median():.2f}")
+axes[2].legend()
+
+plt.tight_layout()
+plt.show()
 
 # %% [markdown]
+# ### Preprocessing Pipeline
 #
+# Demonstrating the preprocessing pipeline on INbreast images, adapted from the CBIS-DDSM preprocessing.
 
 # %%
+import cv2
+import matplotlib.patches as mpatches
+
+# %% [markdown]
+# #### Morphological Transformations
+#
+# Morphological operations refine the binary mask by removing noise and filling gaps:
+#
+# - **Opening** (erosion followed by dilation): Removes small bright spots/noise outside the breast region
+# - **Closing** (dilation followed by erosion): Fills small holes within the breast region
 
 # %%
+def apply_morphological_transforms(thresh_frame, iterations: int = 2):
+    """Apply morphological opening and closing to clean up binary mask."""
+    kernel = np.ones((100, 100), np.uint8)
+    opened_mask = cv2.morphologyEx(thresh_frame, cv2.MORPH_OPEN, kernel)
+    closed_mask = cv2.morphologyEx(opened_mask, cv2.MORPH_CLOSE, kernel, iterations=iterations)
+    return closed_mask
+
+
+def get_contours_from_mask(mask):
+    """Find the largest contour and return its bounding box."""
+    cnts, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cnt = max(cnts, key=cv2.contourArea)
+    x, y, w, h = cv2.boundingRect(cnt)
+    return (x, y, w, h)
+
+
+def crop_coords(img_array):
+    """Get bounding box coordinates for the breast ROI after thresholding pipeline."""
+    if len(img_array.shape) > 2:
+        img_array = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+    # Normalize to 8-bit if needed
+    if img_array.max() > 255:
+        img_array = ((img_array - img_array.min()) / (img_array.max() - img_array.min()) * 255).astype(np.uint8)
+    blur = cv2.GaussianBlur(img_array, (5, 5), 0)
+    _, breast_mask = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    morph_img = apply_morphological_transforms(breast_mask)
+    return get_contours_from_mask(morph_img)
+
+# %% [markdown]
+# #### Bounding Box Detection Example
+#
+# Using Otsu's thresholding and morphological operations to detect the breast region.
 
 # %%
+# Load a sample MLO image for demonstration
+sample_mlo = inbreast_df[inbreast_df.View == "MLO"].iloc[0]
+sample_filename = sample_mlo['File Name']
+dicom_path = list((INBREAST_ROOT / "AllDICOMs").rglob(f"{sample_filename}*.dcm"))[0]
+dicom_data = pydicom.dcmread(dicom_path)
+sample_img = dicom_data.pixel_array
 
 # %%
+# Normalize to 8-bit for processing
+sample_img_8bit = ((sample_img - sample_img.min()) / (sample_img.max() - sample_img.min()) * 255).astype(np.uint8)
+
+# Apply preprocessing steps
+blurred_img = cv2.GaussianBlur(sample_img_8bit, (5, 5), 0)
+_, breast_mask = cv2.threshold(blurred_img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+morph_img = apply_morphological_transforms(breast_mask)
+
+# Get bounding box
+x, y, w, h = get_contours_from_mask(morph_img)
+
+# %%
+# Visualize the preprocessing steps
+fig, axes = plt.subplots(2, 2, figsize=(12, 12))
+
+axes[0, 0].imshow(sample_img_8bit, cmap='gray')
+axes[0, 0].set_title('Original (8-bit normalized)', fontweight='bold')
+axes[0, 0].axis('off')
+
+axes[0, 1].imshow(blurred_img, cmap='gray')
+axes[0, 1].set_title('Gaussian Blur', fontweight='bold')
+axes[0, 1].axis('off')
+
+axes[1, 0].imshow(morph_img, cmap='gray')
+axes[1, 0].set_title('Morphological Transform', fontweight='bold')
+axes[1, 0].axis('off')
+
+axes[1, 1].imshow(sample_img_8bit, cmap='gray')
+rect = mpatches.Rectangle((x, y), w, h, linewidth=3, edgecolor='red', facecolor='none')
+axes[1, 1].add_patch(rect)
+axes[1, 1].set_title('Detected Bounding Box', fontweight='bold')
+axes[1, 1].axis('off')
+
+plt.tight_layout()
+plt.show()
+
+# %% [markdown]
+# #### Truncation Normalisation
+#
+# **Truncation normalisation** clips extreme pixel values using percentiles and scales to [0, 1]:
+# - Uses 5th and 99th percentiles to handle outliers
+# - More robust than min-max scaling for medical images
+
+# %%
+def truncation_normalisation(img):
+    """
+    Clip and normalize pixels in the breast ROI.
+    Uses 5th and 99th percentiles to handle outliers.
+    """
+    Pmin = np.percentile(img[img != 0], 5)
+    Pmax = np.percentile(img[img != 0], 99)
+    truncated = np.clip(img, Pmin, Pmax)
+    normalized = (truncated - Pmin) / (Pmax - Pmin)
+    normalized[img == 0] = 0
+    return normalized
+
+# %% [markdown]
+# #### CLAHE (Contrast Limited Adaptive Histogram Equalization)
+#
+# CLAHE enhances local contrast while limiting noise amplification:
+# - Divides image into tiles and equalizes each independently
+# - Clip limit prevents over-amplification in homogeneous regions
+
+# %%
+def clahe(img, clip):
+    """Apply CLAHE for image enhancement."""
+    clahe_obj = cv2.createCLAHE(clipLimit=clip)
+    cl = clahe_obj.apply(np.array(img * 255, dtype=np.uint8))
+    return cl
+
+
+def preprocess_mammogram(img_array, target_size=512):
+    """
+    Full preprocessing pipeline for a mammogram image.
+    1. Crop to ROI bounding box
+    2. Normalize using truncation normalization
+    3. Enhance contrast with CLAHE at multiple clip levels
+    4. Merge into 3-channel image
+    5. Resize to target size
+    """
+    # Handle high bit-depth images
+    if img_array.max() > 255:
+        img_array = ((img_array - img_array.min()) / (img_array.max() - img_array.min()) * 255).astype(np.uint8)
+
+    # Crop to ROI
+    x, y, w, h = crop_coords(img_array)
+    img_cropped = img_array[y:y+h, x:x+w]
+
+    # Normalize
+    img_normalized = truncation_normalisation(img_cropped)
+
+    # Enhance contrast with different CLAHE clip limits
+    cl1 = clahe(img_normalized, 1.0)
+    cl2 = clahe(img_normalized, 2.0)
+
+    # Merge into 3-channel image
+    img_final = cv2.merge((np.array(img_normalized * 255, dtype=np.uint8), cl1, cl2))
+
+    # Resize to target size
+    img_final = cv2.resize(img_final, (target_size, target_size))
+
+    return img_final
+
+# %% [markdown]
+# #### Full Pipeline Demonstration
+#
+# The complete preprocessing pipeline outputs a 3-channel image:
+# - **Channel 1 (R)**: Original normalised image
+# - **Channel 2 (G)**: CLAHE with clip=1.0
+# - **Channel 3 (B)**: CLAHE with clip=2.0
+
+# %%
+# Get ROI bounding box
+x, y, w, h = crop_coords(sample_img)
+
+# Display preprocessing pipeline
+fig, axes = plt.subplots(1, 3, figsize=(14, 5))
+
+axes[0].imshow(sample_img_8bit, cmap='gray')
+rect = mpatches.Rectangle((x, y), w, h, linewidth=3, edgecolor='red', facecolor='none')
+axes[0].add_patch(rect)
+axes[0].set_title('Original with ROI', fontweight='bold')
+axes[0].axis('off')
+
+# Display cropped ROI
+img_cropped = sample_img_8bit[y:y+h, x:x+w]
+axes[1].imshow(img_cropped, cmap='gray')
+axes[1].set_title('Cropped ROI', fontweight='bold')
+axes[1].axis('off')
+
+# Display final preprocessed image
+img_final = preprocess_mammogram(sample_img)
+axes[2].imshow(img_final)
+axes[2].set_title('Preprocessed (3-channel)', fontweight='bold')
+axes[2].axis('off')
+
+plt.tight_layout()
+plt.show()
+
+# %% [markdown]
+# #### Pixel Distribution Before and After Normalisation
+
+# %%
+# Prepare cropped image for comparison
+img_cropped = sample_img_8bit[y:y+h, x:x+w]
+trunc_img = truncation_normalisation(img_cropped)
+
+# Create figure with images and histograms
+fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+
+# Before normalisation - image
+axes[0, 0].imshow(img_cropped, cmap='gray')
+axes[0, 0].set_title('Before Normalisation', fontweight='bold')
+axes[0, 0].axis('off')
+
+# Before normalisation - histogram
+pixels_before = img_cropped[img_cropped > 0].flatten()
+axes[1, 0].hist(pixels_before, bins=50, color='steelblue', edgecolor='black', alpha=0.7)
+axes[1, 0].set_xlabel('Pixel Value (0-255)')
+axes[1, 0].set_ylabel('Frequency')
+axes[1, 0].set_title('Pixel Distribution (Before)')
+axes[1, 0].axvline(x=np.percentile(pixels_before, 5), color='red', linestyle='--', label='5th percentile')
+axes[1, 0].axvline(x=np.percentile(pixels_before, 99), color='orange', linestyle='--', label='99th percentile')
+axes[1, 0].legend(fontsize=8)
+
+# After normalisation - image
+axes[0, 1].imshow(trunc_img, cmap='gray')
+axes[0, 1].set_title('After Normalisation', fontweight='bold')
+axes[0, 1].axis('off')
+
+# After normalisation - histogram
+pixels_after = trunc_img[trunc_img > 0].flatten()
+axes[1, 1].hist(pixels_after, bins=50, color='seagreen', edgecolor='black', alpha=0.7)
+axes[1, 1].set_xlabel('Pixel Value (0-1)')
+axes[1, 1].set_ylabel('Frequency')
+axes[1, 1].set_title('Pixel Distribution (After)')
+
+plt.suptitle('Effect of Truncation Normalisation on Pixel Distribution', fontsize=14, fontweight='bold')
+plt.tight_layout()
+plt.show()
+
+# Print statistics
+print(f"Before: min={pixels_before.min()}, max={pixels_before.max()}, mean={pixels_before.mean():.1f}, std={pixels_before.std():.1f}")
+print(f"After:  min={pixels_after.min():.3f}, max={pixels_after.max():.3f}, mean={pixels_after.mean():.3f}, std={pixels_after.std():.3f}")
 
 # %% [markdown]
 # ## Questions
