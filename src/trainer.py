@@ -26,18 +26,14 @@ def get_train_transform(image_size: int = 512):
     """Get training augmentation pipeline."""
     return A.Compose([
         # Crops
-        A.RandomSizedCrop(min_max_height=(256, 480), size=(image_size, image_size), p=0.4),
+        A.RandomResizedCrop(height=image_size, width=image_size, scale=(0.5, 1.0), p=0.4),
 
         # Flips
         A.HorizontalFlip(p=0.5),
         A.VerticalFlip(p=0.5),
 
         # Downscale - simulates lower resolution acquisitions
-        A.OneOf([
-            A.Downscale(scale_range=(0.75, 0.95), interpolation_pair={'downscale': cv2.INTER_AREA, 'upscale': cv2.INTER_LINEAR}, p=0.1),
-            A.Downscale(scale_range=(0.75, 0.95), interpolation_pair={'downscale': cv2.INTER_AREA, 'upscale': cv2.INTER_LANCZOS4}, p=0.1),
-            A.Downscale(scale_range=(0.75, 0.95), interpolation_pair={'downscale': cv2.INTER_LINEAR, 'upscale': cv2.INTER_LINEAR}, p=0.8),
-        ], p=0.125),
+        A.Downscale(scale_min=0.75, scale_max=0.95, interpolation=cv2.INTER_LINEAR, p=0.125),
 
         # Contrast - simulates exposure variations
         A.OneOf([
@@ -51,7 +47,7 @@ def get_train_transform(image_size: int = 512):
             A.Affine(
                 scale=(0.85, 1.15), rotate=(-30, 30),
                 translate_percent={'x': (-0.1, 0.1), 'y': (-0.2, 0.2)},
-                border_mode=cv2.BORDER_CONSTANT,
+                mode=cv2.BORDER_CONSTANT,
                 p=0.6
             ),
             A.ElasticTransform(
@@ -60,7 +56,7 @@ def get_train_transform(image_size: int = 512):
             ),
             A.GridDistortion(
                 num_steps=5, distort_limit=0.3, interpolation=cv2.INTER_LINEAR,
-                border_mode=cv2.BORDER_CONSTANT, normalized=True, p=0.2
+                border_mode=cv2.BORDER_CONSTANT, p=0.2
             ),
         ], p=0.5),
     ], p=0.9)
@@ -262,6 +258,12 @@ def main():
         required=True
     )
     parser.add_argument(
+        "--data-dir",
+        type=str,
+        help="Path to data directory containing train.csv, val.csv, test.csv, and img/",
+        required=True
+    )
+    parser.add_argument(
         "--weights",
         type=str,
         help="Path to pretrained weights (.npz) to load before training",
@@ -269,7 +271,7 @@ def main():
     )
     args = parser.parse_args()
 
-    DATA_DIR = Path("datasets/prep/cbis-ddsm")
+    DATA_DIR = Path(args.data_dir)
     IMG_DIR = DATA_DIR / "img"
     TRAIN_CSV = DATA_DIR / "train.csv"
     VAL_CSV = DATA_DIR / "val.csv"
@@ -300,7 +302,7 @@ def main():
             "num_classes": NUM_CLASSES,
             "model": MODEL_NAME,
             "optimizer": "adam",
-            "dataset": "cbis-ddsm",
+            "dataset": args.data_dir,
             "frozen_backbone": True,
             "augmentation": True,
             "pretrained_weights": args.weights,
@@ -382,7 +384,7 @@ def main():
         num_workers=4
     )
 
-    best_checkpoint = Path("checkpoints") / "best_model.npz"
+    best_checkpoint = Path("checkpoints") / args.run_name / "best_model.npz"
     if best_checkpoint.exists():
         print(f"Loading best model from {best_checkpoint}")
         model.load_weights(str(best_checkpoint))
