@@ -104,3 +104,24 @@ Confusion Matrix (threshold=0.5):
 ==================================================
 ```
 
+Compare with InBreast from pure model.
+
+```
+uv run src/trainer.py --model-name resnet50 --data-dir datasets/prep/inbreast --run-name inbreast-train
+```
+
+```
+uv run src/inference.py --model-name resnet50 --weights checkpoints/inbreast-train/best_model.npz --data-dir datasets/prep/inbreast
+==================================================
+RESULTS
+==================================================
+AUC:         0.9101
+Sensitivity: 0.4000 (TPR, Recall)
+Specificity: 1.0000 (TNR)
+Accuracy:    0.8525
+--------------------------------------------------
+Confusion Matrix (threshold=0.5):
+  TP:    6  FN:    9
+  FP:    0  TN:   46
+==================================================
+```
