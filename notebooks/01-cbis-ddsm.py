@@ -17,6 +17,11 @@
 # # CBIS-DDSM EDA
 
 # %% [markdown]
+# This notebook describes my exploratory dataset analysis of the CBIS-DDSM dataset (Lee et al).
+#
+# Firstly, we import some libraries used throughout the notebook.
+
+# %% [markdown]
 # ## Imports
 
 # %%
@@ -26,6 +31,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from PIL import Image
 import numpy as np
+import cv2
+import matplotlib.patches as patches
 
 # %% [markdown]
 # ## Metadata File Review
@@ -43,10 +50,13 @@ import numpy as np
 # - `datasets/cbis-ddsm-breast-cancer-image-dataset/csv/calc_case_description_test_set.csv`
 #
 #
-# And 2 meta files:
+# ### Meta Fiels
 #
 # - `datasets/cbis-ddsm-breast-cancer-image-dataset/csv/dicom_info.csv`
 # - `datasets/cbis-ddsm-breast-cancer-image-dataset/csv/meta.csv`
+
+# %% [markdown]
+# I load the datasets and show some sample rows below.
 
 # %%
 train_set_mass_df = pd.read_csv("../datasets/cbis-ddsm-breast-cancer-image-dataset/csv/mass_case_description_train_set.csv")
@@ -93,29 +103,26 @@ patient_5
 
 # %% [markdown]
 # For this patient, we have a mammography for a single breast, with the expected two views:
-# - CC - a top-to-bottom view.
-# - MLO - a side view.
+#
+# - CC (Caniocaudal): a top-to-bottom view.
+# - MLO (Mediolateral): a side view.
 
 # %% [markdown]
 # ## Image Extraction
 #
-# Each row, which represents a view of the patient's breast contains 3 dicom files:
+# Each row, which represents a view of the patient's breast contains references to 3 dicom files:
 #
 # - image file path
 # - ROI mask file path
 # - cropped image file path
 #
-# The creator of the CBIS-DDSM JPG dataset has converted each of these files into jpg files, which can be retrieve by extracting the dicom id from the path, and then looking it up in the `dicom_info_df` file.
-#
-# Firstly, need a function to extract the Dicom id from the path
-
-# %%
+# The dataset I'm using is actually a post-processed version of CBIS-DDSM, [found on Kaggle by @awsaf](https://www.kaggle.com/datasets/awsaf49/cbis-ddsm-breast-cancer-image-dataset), which has converted each of the original Dicom files in JPG. The image path which can be retrieve by extracting the dicom id from the path, and then looking it up in the `dicom_info_df` file.
 
 # %% [markdown]
 # ### Fetch img file path
 
 # %% [markdown]
-# From some manual exploration, I put together a function that extracts the image file given a row from the dataset.
+# From some manual exploration, I put together some helper functions that extracts the image file given a row from the dataset.
 
 # %%
 JPEG_ROOT = Path("../datasets/cbis-ddsm-breast-cancer-image-dataset/jpeg")
@@ -170,16 +177,13 @@ mlo_img = get_patient_img(patient_02033[patient_02033["image view"] == "MLO"].il
 show_img_grid(cc_img, mlo_img)
 
 # %% [markdown]
-# At this point, I'd like to know, do all patients have both images, or are there some patients with an incomplete mammogram?
-
-# %% [markdown]
 # ### Fetch ROI mask file path
 
 # %% [markdown]
-#
+# Each mammograph view also contains a region-of-interest annotation, which can extract either a calcification or mass abnormality within the breast. We can visual them as follows.
 
 # %%
-mask_img_path = get_img_path(patient_5.iloc[0]["ROI mask file path"])
+mask_img_path = get_img_path(patient_5[patient_5["image view"] == "CC"].iloc[0]["ROI mask file path"])
 mask_img = Image.open(mask_img_path)
 
 # %%
@@ -220,16 +224,124 @@ cropped_img_path
 # %%
 plt.imshow(Image.open(cropped_img_path), cmap="grey")
 
+
 # %% [markdown]
-# ## EDA
+# ## Manual Breast Extraction
 #
-# Firstly, we'll take a look at the label distribution.
+# Since we want to explore the possibility of utilising this model again Mammogram data that does not contain region-of-interest annotations, I want to explore an alternate method of breast extraction, which aims to remove blank space, and non-breast noise from the image using thresholding. Some of this work builds upon the knowledge that I gain from studying signal processing in CM3065 - Intelligent Signal Processing.
+#
+# To attempt to crop some of the area around the breast, I'll utilise some classical object detection approaches.
+#
+# I created some utility functions.
+
+# %%
+def show_img_grid(img_1, img_2):
+    fig, axes = plt.subplots(1, 2, figsize=(6, 4))
+
+    axes[0].imshow(img_1, cmap='gray')
+    axes[0].set_xticks([])
+    axes[0].set_yticks([])
+
+    axes[1].imshow(img_2, cmap='gray')
+    axes[1].set_xticks([])
+    axes[1].set_yticks([])
+
+    plt.tight_layout()
+    plt.show()
+
+
+# %%
+sample_img = np.array(cc_img.convert('L'))
+
+# %% [markdown]
+# ### Gaussian Blur
+#
+# A 5×5 Gaussian blur smooths out high-frequency noise while preserving the overall structure. This prevents small noise pixels from creating spurious regions during thresholding.
+#
+# Source: https://docs.opencv.org/4.x/d4/d13/tutorial_py_filtering.html
+
+# %%
+blurred_img = cv2.GaussianBlur(sample_img, (5, 5), 0)
+show_img_grid(sample_img, blurred_img)
+
+# %% [markdown]
+# ### Otsu's Thresholding
+#
+# Otsu's method automatically determines the optimal threshold value by minimising intra-class variance (or equivalently, maximising inter-class variance) between foreground and background pixels. This is ideal for separating the breast tissue from the dark background without manual threshold tuning.
+#
+# Source: https://docs.opencv.org/4.x/d7/d4d/tutorial_py_thresholding.html
+
+# %%
+_, breast_mask = cv2.threshold(blurred_img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+show_img_grid(blurred_img, breast_mask)
+
+
+# %% [markdown]
+# ### Morphological Transformations
+#
+# Morphological operations refine the binary mask by removing noise and filling gaps:
+#
+# - **Opening** (erosion followed by dilation): Removes small bright spots/noise outside the breast region
+# - **Closing** (dilation followed by erosion): Fills small holes within the breast region
+#
+# The 100×100 kernel size is chosen to handle the large scale of mammogram images (typically 3000-5000 pixels). Multiple iterations of closing ensure continuous breast boundaries.
+
+# %%
+def apply_morphological_transforms(
+    thresh_frame, iterations: int = 2
+):
+    kernel = np.ones((100, 100), np.uint8)
+    opened_mask = cv2.morphologyEx(thresh_frame, cv2.MORPH_OPEN, kernel)
+    closed_mask = cv2.morphologyEx(opened_mask, cv2.MORPH_CLOSE, kernel, iterations=iterations)
+    return closed_mask
+
+
+# %%
+morph_img = apply_morphological_transforms(breast_mask)
+show_img_grid(breast_mask, morph_img)
+
+
+# %% [markdown]
+# As we can see, it has removed the noisy label.
+#
+# Next we can find countours, and use the max contour as the overall bounding box.
+
+# %%
+def get_contours_from_mask(mask):
+    cnts, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cnt = max(cnts, key=cv2.contourArea)
+    x, y, w, h = cv2.boundingRect(cnt)
+    return (x, y, w, h)
+
+
+# %%
+x, y, w, h = get_contours_from_mask(morph_img)
+
+plt.imshow(sample_img, cmap='gray')
+ax = plt.gca()
+
+rect = patches.Rectangle((x, y), w, h, linewidth=2, edgecolor='r', facecolor='none')
+ax.add_patch(rect)
+
+plt.title('Original with ROI')
+plt.axis('off')
+plt.show()
+
+# %% [markdown]
+# Very nice, near perfect bounding box around the breast area.
+
+# %% [markdown]
+# ## Metadata EDA
+#
+# Firstly, we'll take a look some of the provided metadata, to better understand the CBIS-DDSM dataset.
 
 # %% [markdown]
 # ### Combine all data for label analysis
 
+# %% [markdown]
+# Firstly we combine the mass and calcification datasets into a single dataset for analysis. We add a label to tell us which dataset it came from.
+
 # %%
-# Combine train and test sets for comprehensive analysis
 all_mass_df = pd.concat([train_set_mass_df, test_set_mass_df], ignore_index=True)
 all_calc_df = pd.concat([train_set_calc_df, test_set_calc_df], ignore_index=True)
 
@@ -248,6 +360,8 @@ print(f"Calcification cases: {len(all_calc_df)}")
 # ### Pathology Distribution
 #
 # The most important label is `pathology`, which indicates whether the abnormality is benign or malignant.
+#
+# We explore the distribution over each dataset.
 
 # %%
 fig, axes = plt.subplots(1, 3, figsize=(16, 5))
@@ -316,6 +430,11 @@ plt.show()
 
 # %% [markdown]
 # ### Abnormality Type Distribution
+
+# %% [markdown]
+# Next we breakdown the abnormality type.
+#
+# Pie chart source: https://matplotlib.org/stable/gallery/pie_and_polar_charts/pie_features.html#sphx-glr-gallery-pie-and-polar-charts-pie-features-py
 
 # %%
 fig, axes = plt.subplots(1, 2, figsize=(12, 5))
@@ -431,26 +550,9 @@ plt.tight_layout()
 plt.show()
 
 # %% [markdown]
-# ### Image View Distribution
-
-# %%
-fig, ax = plt.subplots(figsize=(10, 6))
-
-view_counts = all_data_df['image view'].value_counts()
-ax.bar(view_counts.index, view_counts.values, color='#d35400')
-ax.set_title('Image View Distribution', fontsize=12, fontweight='bold')
-ax.set_xlabel('Image View')
-ax.set_ylabel('Count')
-for i, v in enumerate(view_counts.values):
-    ax.text(i, v + 5, str(v), ha='center', va='bottom')
-
-plt.tight_layout()
-plt.show()
-
-# %% [markdown]
 # ### Image Dimensions Analysis
 #
-# Analyze the height and width distribution of images across the dataset.
+# Finally, we analysis the height and width distribution of images across the dataset, to better understand the image sizes in the CBIS-DDSM dataste.
 
 # %%
 from tqdm import tqdm
@@ -510,3 +612,5 @@ axes[2].legend()
 plt.tight_layout()
 plt.show()
 
+
+# %%
