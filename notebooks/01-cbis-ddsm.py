@@ -186,7 +186,7 @@ mask_img = Image.open(mask_img_path)
 plt.imshow(mask_img, cmap="grey")
 
 # %%
-patient_np = np.array(patient_img)
+patient_np = np.array(cc_img)
 mask_np = np.array(mask_img)
 
 plt.figure(figsize=(8,8))
@@ -447,4 +447,66 @@ for i, v in enumerate(view_counts.values):
 plt.tight_layout()
 plt.show()
 
+# %% [markdown]
+# ### Image Dimensions Analysis
+#
+# Analyze the height and width distribution of images across the dataset.
+
 # %%
+from tqdm import tqdm
+
+def get_image_dimensions(df, desc="Processing"):
+    """Extract image dimensions for all images in a dataframe."""
+    dimensions = []
+    for _, row in tqdm(df.iterrows(), total=len(df), desc=desc):
+        try:
+            img_path = get_img_path(row["image file path"])
+            img = Image.open(img_path)
+            width, height = img.size
+            dimensions.append({
+                "patient_id": row["patient_id"],
+                "image_view": row["image view"],
+                "width": width,
+                "height": height,
+                "aspect_ratio": width / height
+            })
+        except Exception as e:
+            print(f"Error processing {row['patient_id']}: {e}")
+    return pd.DataFrame(dimensions)
+
+# %%
+dimensions_df = get_image_dimensions(all_data_df, desc="Analysing image dimensions")
+
+# %%
+fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+
+# Width distribution
+axes[0].hist(dimensions_df['width'], bins=50, color='#3498db', edgecolor='black', alpha=0.7)
+axes[0].set_title('Image Width Distribution', fontsize=12, fontweight='bold')
+axes[0].set_xlabel('Width (pixels)')
+axes[0].set_ylabel('Count')
+axes[0].axvline(dimensions_df['width'].median(), color='red', linestyle='--',
+                label=f"Median: {dimensions_df['width'].median():.0f}")
+axes[0].legend()
+
+# Height distribution
+axes[1].hist(dimensions_df['height'], bins=50, color='#2ecc71', edgecolor='black', alpha=0.7)
+axes[1].set_title('Image Height Distribution', fontsize=12, fontweight='bold')
+axes[1].set_xlabel('Height (pixels)')
+axes[1].set_ylabel('Count')
+axes[1].axvline(dimensions_df['height'].median(), color='red', linestyle='--',
+                label=f"Median: {dimensions_df['height'].median():.0f}")
+axes[1].legend()
+
+# Aspect ratio distribution
+axes[2].hist(dimensions_df['aspect_ratio'], bins=50, color='#9b59b6', edgecolor='black', alpha=0.7)
+axes[2].set_title('Aspect Ratio Distribution (Width/Height)', fontsize=12, fontweight='bold')
+axes[2].set_xlabel('Aspect Ratio')
+axes[2].set_ylabel('Count')
+axes[2].axvline(dimensions_df['aspect_ratio'].median(), color='red', linestyle='--',
+                label=f"Median: {dimensions_df['aspect_ratio'].median():.2f}")
+axes[2].legend()
+
+plt.tight_layout()
+plt.show()
+
