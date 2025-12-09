@@ -22,11 +22,16 @@ import albumentations as A
 import wandb
 
 
-def get_train_transform(image_size: int = 512):
-    """Get training augmentation pipeline."""
+def get_train_transform(aug_size: int = 512, output_size: int = 224):
+    """Get training augmentation pipeline.
+
+    Args:
+        aug_size: Size at which to apply augmentations (should match input image size)
+        output_size: Final output size for model input
+    """
     return A.Compose([
-        # Crops
-        A.RandomResizedCrop(height=image_size, width=image_size, scale=(0.5, 1.0), p=0.4),
+        # Crops - applied at full resolution for better detail preservation
+        A.RandomResizedCrop(height=aug_size, width=aug_size, scale=(0.5, 1.0), p=0.4),
 
         # Flips
         A.HorizontalFlip(p=0.5),
@@ -59,7 +64,17 @@ def get_train_transform(image_size: int = 512):
                 border_mode=cv2.BORDER_CONSTANT, p=0.2
             ),
         ], p=0.5),
-    ], p=0.9)
+
+        # Final resize to model input size - done AFTER augmentations
+        A.Resize(height=output_size, width=output_size),
+    ], p=1.0)
+
+
+def get_val_transform(output_size: int = 224):
+    """Get validation/test transform (just resize, no augmentation)."""
+    return A.Compose([
+        A.Resize(height=output_size, width=output_size),
+    ])
 
 
 class CSVDataset(Dataset):
@@ -70,11 +85,9 @@ class CSVDataset(Dataset):
         csv_path: str,
         img_dir: str,
         transform=None,
-        image_size: int = 224
     ):
         self.img_dir = Path(img_dir)
         self.transform = transform
-        self.image_size = image_size
         self.samples = []
 
         with open(csv_path, 'r') as f:
@@ -91,12 +104,11 @@ class CSVDataset(Dataset):
         filename, label = self.samples[idx]
         img_path = self.img_dir / filename
 
-        # Load and preprocess image
+        # Load image at original size (512x512 from preprocessing)
         img = Image.open(img_path).convert('RGB')
-        img = img.resize((self.image_size, self.image_size))
         img = np.array(img).astype(np.uint8)
 
-        # Apply albumentations transform (expects uint8, returns uint8)
+        # Apply albumentations transform (includes augmentation + final resize)
         if self.transform:
             img = self.transform(image=img)['image']
 
@@ -284,6 +296,9 @@ def main():
     UNFREEZE_EPOCH = 2
     # Lower LR for fine-tuning
     UNFREEZE_LR = 1e-5
+    # Size of preprocessed images (augmentations applied at this resolution)
+    AUG_SIZE = 512
+    # Final size for model input
     IMAGE_SIZE = 224
     NUM_CLASSES = 2
     MODEL_NAME = args.model_name
@@ -298,6 +313,7 @@ def main():
             "learning_rate": LEARNING_RATE,
             "unfreeze_epoch": UNFREEZE_EPOCH,
             "unfreeze_lr": UNFREEZE_LR,
+            "aug_size": AUG_SIZE,
             "image_size": IMAGE_SIZE,
             "num_classes": NUM_CLASSES,
             "model": MODEL_NAME,
@@ -311,17 +327,17 @@ def main():
     )
 
     print("Loading datasets...")
-    train_transform = get_train_transform(image_size=IMAGE_SIZE)
+    train_transform = get_train_transform(aug_size=AUG_SIZE, output_size=IMAGE_SIZE)
+    val_transform = get_val_transform(output_size=IMAGE_SIZE)
     train_dataset = CSVDataset(
         csv_path=str(TRAIN_CSV),
         img_dir=str(IMG_DIR),
         transform=train_transform,
-        image_size=IMAGE_SIZE
     )
     val_dataset = CSVDataset(
         csv_path=str(VAL_CSV),
         img_dir=str(IMG_DIR),
-        image_size=IMAGE_SIZE
+        transform=val_transform,
     )
 
     print(f"Training samples: {len(train_dataset)}")
@@ -373,7 +389,7 @@ def main():
     test_dataset = CSVDataset(
         csv_path=str(TEST_CSV),
         img_dir=str(IMG_DIR),
-        image_size=IMAGE_SIZE
+        transform=val_transform,
     )
     print(f"Test samples: {len(test_dataset)}")
 
