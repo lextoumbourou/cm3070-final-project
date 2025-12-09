@@ -3,7 +3,7 @@ CBIS-DDSM dataset preparation script
 
 This script prepares the CBIS-DDSM dataset for training by:
 1. Loading mass and calcification case descriptions
-2. Preprocessing full mammogram images (crop, normalize, CLAHE)
+2. Preprocessing full mammogram images (crop and resize to grayscale)
 3. Using the official test split and creating a validation split from training data
 4. Saving processed images and metadata CSVs
 """
@@ -16,9 +16,10 @@ import logging
 import pandas as pd
 import numpy as np
 import cv2
-from PIL import Image
+import pydicom
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
+from pydantic import BaseModel
 
 
 logging.basicConfig(
@@ -28,11 +29,17 @@ logger = logging.getLogger(__name__)
 
 TARGET_SIZE = 512
 
-RAW_DATA_ROOT = Path("datasets/cbis-ddsm-breast-cancer-image-dataset")
-JPEG_ROOT = RAW_DATA_ROOT / "jpeg"
-CSV_ROOT = RAW_DATA_ROOT / "csv"
+RAW_DATA_ROOT = Path("datasets/CBIS-DDSM")
+IMG_ROOT = RAW_DATA_ROOT / "CBIS-DDSM"
 OUTPUT_ROOT = Path("datasets/prep/cbis-ddsm")
 IMG_OUTPUT_DIR = OUTPUT_ROOT / "img"
+
+
+class DCMData(BaseModel):
+    """Parsed DICOM file path data."""
+    subject_id: str
+    study_uid: str
+    series_uid: str
 
 
 def load_and_combine_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -40,14 +47,14 @@ def load_and_combine_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     Load CBIS-DDSM CSVs and keep train/test splits separate
 
     Returns:
-        Train DataFrame, Test DataFrame, and DICOM info DataFrame
+        Train DataFrame, Test DataFrame, and metadata DataFrame
     """
     logger.info("Loading CBIS-DDSM metadata files...")
 
-    train_mass = pd.read_csv(CSV_ROOT / "mass_case_description_train_set.csv")
-    test_mass = pd.read_csv(CSV_ROOT / "mass_case_description_test_set.csv")
-    train_calc = pd.read_csv(CSV_ROOT / "calc_case_description_train_set.csv")
-    test_calc = pd.read_csv(CSV_ROOT / "calc_case_description_test_set.csv")
+    train_mass = pd.read_csv(RAW_DATA_ROOT / "mass_case_description_train_set.csv")
+    test_mass = pd.read_csv(RAW_DATA_ROOT / "mass_case_description_test_set.csv")
+    train_calc = pd.read_csv(RAW_DATA_ROOT / "calc_case_description_train_set.csv")
+    test_calc = pd.read_csv(RAW_DATA_ROOT / "calc_case_description_test_set.csv")
 
     train_mass["abnormality_category"] = "mass"
     test_mass["abnormality_category"] = "mass"
@@ -57,7 +64,7 @@ def load_and_combine_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     train_df = pd.concat([train_mass, train_calc], ignore_index=True)
     test_df = pd.concat([test_mass, test_calc], ignore_index=True)
 
-    dicom_info_df = pd.read_csv(CSV_ROOT / "dicom_info.csv")
+    metadata_df = pd.read_csv(RAW_DATA_ROOT / "metadata.csv")
 
     logger.info(
         f"Train cases: {len(train_df)} (Mass: {len(train_mass)}, Calc: {len(train_calc)})"
@@ -68,7 +75,7 @@ def load_and_combine_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     logger.info(f"Train patients: {train_df['patient_id'].nunique()}")
     logger.info(f"Test patients: {test_df['patient_id'].nunique()}")
 
-    return train_df, test_df, dicom_info_df
+    return train_df, test_df, metadata_df
 
 
 def split_by_patient(
@@ -102,18 +109,39 @@ def split_by_patient(
     return train_df, val_df
 
 
-def get_img_id_from_dcm_file(path: str) -> str:
-    return str(path).split("/")[1]
+def get_file_data_from_dcm(dcm_path: str) -> DCMData:
+    """Parse DICOM file path to extract subject_id, study_uid, and series_uid."""
+    data = str(dcm_path).strip().split("/")
+    return DCMData(subject_id=data[0], study_uid=data[1], series_uid=data[2])
 
 
-def get_jpg_path(img_file_path: str):
-    return JPEG_ROOT / img_file_path.replace("CBIS-DDSM/jpeg/", "")
+def get_meta_from_dcm_data(dcm_data: DCMData, metadata_df: pd.DataFrame) -> pd.Series:
+    """Look up metadata row from parsed DCM data."""
+    meta = metadata_df[
+        (metadata_df["Subject ID"] == dcm_data.subject_id) &
+        (metadata_df["Series UID"] == dcm_data.series_uid) &
+        (metadata_df["Study UID"] == dcm_data.study_uid)
+    ].iloc[0]
+    return meta
 
 
-def get_img_path(img_path: str, dicom_info_df: pd.DataFrame) -> Path:
-    img_file = get_img_id_from_dcm_file(img_path)
-    dicom_row = dicom_info_df[dicom_info_df.StudyInstanceUID == img_file].iloc[0]
-    return get_jpg_path(dicom_row.image_path)
+def get_img_from_file_location(file_location: Path) -> Path:
+    """Get the DICOM file from a directory."""
+    files = list(file_location.glob("*.dcm"))
+    return files[0]
+
+
+def dicom_to_array(file_path: Path) -> np.ndarray:
+    """Load a DICOM file and return as numpy array."""
+    ds = pydicom.dcmread(file_path)
+    return ds.pixel_array
+
+
+def get_img_path(img_path_str: str, metadata_df: pd.DataFrame) -> Path:
+    """Get the full image path from the image file path string."""
+    dcm_data = get_file_data_from_dcm(img_path_str)
+    img_meta = get_meta_from_dcm_data(dcm_data, metadata_df)
+    return get_img_from_file_location(RAW_DATA_ROOT / img_meta["File Location"])
 
 
 def apply_morphological_transforms(thresh_frame, iterations: int = 2):
@@ -130,43 +158,38 @@ def get_contours_from_mask(mask):
     return (x, y, w, h)
 
 
-def crop_coords(img):
-    sample_img = np.array(img.convert('L'))
-    blur = cv2.GaussianBlur(sample_img, (5, 5), 0)
+def crop_coords(img: np.ndarray):
+    """Get bounding box coordinates for breast region using thresholding."""
+    # Normalize to uint8 for OpenCV operations
+    if img.dtype != np.uint8:
+        # Normalize to 0-255 range
+        img_normalized = ((img - img.min()) / (img.max() - img.min()) * 255).astype(np.uint8)
+    else:
+        img_normalized = img
+
+    blur = cv2.GaussianBlur(img_normalized, (5, 5), 0)
     _, breast_mask = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     morph_img = apply_morphological_transforms(breast_mask)
     return get_contours_from_mask(morph_img)
 
 
-def truncation_normalisation(img):
-    Pmin = np.percentile(img[img != 0], 5)
-    Pmax = np.percentile(img[img != 0], 99)
-    truncated = np.clip(img, Pmin, Pmax)
-    normalized = (truncated - Pmin) / (Pmax - Pmin)
-    normalized[img == 0] = 0
-    return normalized
-
-
-def clahe(img, clip):
-    clahe_obj = cv2.createCLAHE(clipLimit=clip)
-    cl = clahe_obj.apply(np.array(img * 255, dtype=np.uint8))
-    return cl
-
-
-def preprocess_mammogram(img, target_size=TARGET_SIZE):
+def preprocess_mammogram(img: np.ndarray, target_size=TARGET_SIZE):
+    """Preprocess mammogram image: crop and resize to grayscale."""
     x, y, w, h = crop_coords(img)
-    sample_img = np.array(img.convert('L'))
-    img_cropped = sample_img[y:y+h, x:x+w]
-    img_normalized = truncation_normalisation(img_cropped)
-    cl1 = clahe(img_normalized, 1.0)
-    cl2 = clahe(img_normalized, 2.0)
-    img_final = cv2.merge((np.array(img_normalized * 255, dtype=np.uint8), cl1, cl2))
-    img_final = cv2.resize(img_final, (target_size, target_size))
+    img_cropped = img[y:y+h, x:x+w]
+
+    # Normalize to 0-255 range for saving as PNG
+    if img_cropped.dtype != np.uint8:
+        img_normalized = ((img_cropped - img_cropped.min()) / (img_cropped.max() - img_cropped.min()) * 255).astype(np.uint8)
+    else:
+        img_normalized = img_cropped
+
+    img_final = cv2.resize(img_normalized, (target_size, target_size))
     return img_final
 
 def process_case(
     row: pd.Series,
-    dicom_info_df: pd.DataFrame,
+    metadata_df: pd.DataFrame,
     abnormality_category: str,
     output_dir: Path,
     case_idx: int,
@@ -174,20 +197,20 @@ def process_case(
     image_path_str = row["image file path"]
 
     try:
-        jpeg_path = get_img_path(image_path_str, dicom_info_df)
+        dicom_path = get_img_path(image_path_str, metadata_df)
     except (IndexError, KeyError):
-        logger.warning(f"No DICOM match found for: {image_path_str}")
+        logger.warning(f"No metadata match found for: {image_path_str}")
         return None
 
-    if not jpeg_path.exists():
-        logger.warning(f"Image file not found: {jpeg_path}")
+    if not dicom_path.exists():
+        logger.warning(f"Image file not found: {dicom_path}")
         return None
 
     try:
-        img = Image.open(jpeg_path)
+        img = dicom_to_array(dicom_path)
         img_processed = preprocess_mammogram(img)
     except Exception as e:
-        logger.warning(f"Failed to preprocess {jpeg_path}: {e}")
+        logger.warning(f"Failed to preprocess {dicom_path}: {e}")
         return None
 
     patient_id = row["patient_id"]
@@ -198,7 +221,7 @@ def process_case(
     filename = f"{case_idx:05d}_{patient_id}_{breast_side}_{image_view}_{abnormality_category}_{pathology}.png"
     output_path = output_dir / filename
 
-    cv2.imwrite(str(output_path), cv2.cvtColor(img_processed, cv2.COLOR_RGB2BGR))
+    cv2.imwrite(str(output_path), img_processed)
 
     label = 1 if pathology == "MALIGNANT" else 0
 
@@ -228,7 +251,7 @@ def process_case(
 def process_and_save_split(
     split_df: pd.DataFrame,
     split_name: str,
-    dicom_info_df: pd.DataFrame,
+    metadata_df: pd.DataFrame,
     img_output_dir: Path,
 ) -> pd.DataFrame:
     """
@@ -237,7 +260,7 @@ def process_and_save_split(
     Args:
         split_df: DataFrame with cases to process
         split_name: Name of the split (train/val/test)
-        dicom_info_df: DICOM metadata DataFrame
+        metadata_df: Metadata DataFrame for image lookup
         img_output_dir: Directory to save processed images
 
     Returns:
@@ -252,24 +275,24 @@ def process_and_save_split(
     ):
         abnormality_category = row["abnormality_category"]
         metadata = process_case(
-            row, dicom_info_df, abnormality_category, img_output_dir, idx
+            row, metadata_df, abnormality_category, img_output_dir, idx
         )
 
         if metadata is not None:
             processed_cases.append(metadata)
 
-    metadata_df = pd.DataFrame(processed_cases)
+    result_df = pd.DataFrame(processed_cases)
 
     # Save CSV to OUTPUT_ROOT
     csv_path = OUTPUT_ROOT / f"{split_name}.csv"
-    metadata_df.to_csv(csv_path, index=False)
+    result_df.to_csv(csv_path, index=False)
     logger.info(f"Saved {split_name} metadata to {csv_path}")
 
-    logger.info(f"{split_name} - Total cases: {len(metadata_df)}")
-    logger.info(f"{split_name} - Benign: {(metadata_df['label'] == 0).sum()}")
-    logger.info(f"{split_name} - Malignant: {(metadata_df['label'] == 1).sum()}")
+    logger.info(f"{split_name} - Total cases: {len(result_df)}")
+    logger.info(f"{split_name} - Benign: {(result_df['label'] == 0).sum()}")
+    logger.info(f"{split_name} - Malignant: {(result_df['label'] == 1).sum()}")
 
-    return metadata_df
+    return result_df
 
 
 def main():
@@ -298,7 +321,7 @@ def main():
     OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
     IMG_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    train_all_df, test_df, dicom_info_df = load_and_combine_data()
+    train_all_df, test_df, metadata_df = load_and_combine_data()
 
     # Split training data into train and validation sets
     train_df, val_df = split_by_patient(
@@ -306,11 +329,11 @@ def main():
     )
 
     train_metadata = process_and_save_split(
-        train_df, "train", dicom_info_df, IMG_OUTPUT_DIR
+        train_df, "train", metadata_df, IMG_OUTPUT_DIR
     )
-    val_metadata = process_and_save_split(val_df, "val", dicom_info_df, IMG_OUTPUT_DIR)
+    val_metadata = process_and_save_split(val_df, "val", metadata_df, IMG_OUTPUT_DIR)
     test_metadata = process_and_save_split(
-        test_df, "test", dicom_info_df, IMG_OUTPUT_DIR
+        test_df, "test", metadata_df, IMG_OUTPUT_DIR
     )
 
     logger.info("CBIS-DDSM dataset preparation complete!")
