@@ -34,63 +34,63 @@ import numpy as np
 import cv2
 import matplotlib.patches as patches
 
+# %%
+DATASET_ROOT = Path("../datasets/CBIS-DDSM")
+IMG_ROOT = DATASET_ROOT / "CBIS-DDSM"
+
+# %% [markdown]
+# ## Dataset Overview
+
+# %% [markdown]
+# The dataset was downloaded from from https://www.cancerimagingarchive.net/collection/cbis-ddsm.
+#
+# It is a 164GB compressed dataset which uncompresses to around 180GB.
+
+# %%
+# !cd {DATASET_ROOT} && du -sh *
+
 # %% [markdown]
 # ## Metadata File Review
 #
-# There is 2 files provided for each split:
+# There is 2 files provided for each split, representing either calcification or mass abnormalities found in the breast.
 #
-# ### Train
+# - `calc_case_description_${train|test}_set.csv`
+# - `mass_case_description_${train|test}_set.csv`
 #
-# - `datasets/cbis-ddsm-breast-cancer-image-dataset/csv/mass_case_description_train_set.csv`
-# - `datasets/cbis-ddsm-breast-cancer-image-dataset/csv/calc_case_description_train_set.csv`
-#
-# ### Test
-#
-# - `datasets/cbis-ddsm-breast-cancer-image-dataset/csv/mass_case_description_test_set.csv`
-# - `datasets/cbis-ddsm-breast-cancer-image-dataset/csv/calc_case_description_test_set.csv`
-#
-#
-# ### Meta Fiels
-#
-# - `datasets/cbis-ddsm-breast-cancer-image-dataset/csv/dicom_info.csv`
-# - `datasets/cbis-ddsm-breast-cancer-image-dataset/csv/meta.csv`
+# Here we load each file, then concat together to give us one dataset file per split.
+
+# %%
+train_mass_df = pd.read_csv(DATASET_ROOT / "mass_case_description_train_set.csv")
+train_calc_df = pd.read_csv(DATASET_ROOT / "calc_case_description_train_set.csv")
+train_df = pd.concat([train_mass_df, train_calc_df])
+train_mass_df = train_calc_df = None
+train_df.head(1)
+
+# %%
+test_mass_df = pd.read_csv(DATASET_ROOT / "mass_case_description_test_set.csv")
+test_calc_df = pd.read_csv(DATASET_ROOT / "calc_case_description_test_set.csv")
+test_df = pd.concat([test_mass_df, test_calc_df])
+test_mass_df = test_mass_df = None
+test_df.head(1)
+
+# %%
+all_df = pd.concat([train_df, test_df])
+
+# %%
+metadata_df = pd.read_csv(DATASET_ROOT / "metadata.csv")
+metadata_df.head(1)
 
 # %% [markdown]
-# I load the datasets and show some sample rows below.
+# The paper claims that there's 891 mass cases, although the actual dataset appears to have 892 mass abnormalities.
 
 # %%
-train_set_mass_df = pd.read_csv("../datasets/cbis-ddsm-breast-cancer-image-dataset/csv/mass_case_description_train_set.csv")
-train_set_mass_df.head()
-
-# %%
-test_set_mass_df = pd.read_csv("../datasets/cbis-ddsm-breast-cancer-image-dataset/csv/mass_case_description_test_set.csv")
-
-# %%
-train_set_calc_df = pd.read_csv("../datasets/cbis-ddsm-breast-cancer-image-dataset/csv/calc_case_description_train_set.csv")
-train_set_calc_df.head()
-
-# %%
-test_set_calc_df = pd.read_csv("../datasets/cbis-ddsm-breast-cancer-image-dataset/csv/calc_case_description_test_set.csv")
-
-# %%
-dicom_info_df = pd.read_csv("../datasets/cbis-ddsm-breast-cancer-image-dataset/csv/dicom_info.csv")
-dicom_info_df.head()
-
-# %%
-meta_df = pd.read_csv("../datasets/cbis-ddsm-breast-cancer-image-dataset/csv/meta.csv")
-meta_df.head()
+len(all_df[all_df["abnormality type"] == "mass"].patient_id.unique())
 
 # %% [markdown]
-# The paper claims that there's 891 mass cases, for some reason we appear to have 892 in the dataset.
+# The paper also describes 753 calcification abnormalities, which matches what we see in the paper.
 
 # %%
-len(set(train_set_mass_df.patient_id.unique()) | set(test_set_mass_df.patient_id.unique()))
-
-# %% [markdown]
-# However, we have the correct number of calcification cases.
-
-# %%
-test_set_calc_df.patient_id.nunique() + train_set_calc_df.patient_id.nunique()
+len(all_df[all_df["abnormality type"] == "calcification"].patient_id.unique())
 
 # %% [markdown]
 # Let's have a closer look at one patient id to start with. Later we'll try to understand stastics for all patient ids.

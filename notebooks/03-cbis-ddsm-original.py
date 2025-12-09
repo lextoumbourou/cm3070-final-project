@@ -28,6 +28,11 @@ import matplotlib.pyplot as plt
 DATASET_ROOT = Path("../datasets/CBIS-DDSM")
 IMG_ROOT = DATASET_ROOT / "CBIS-DDSM"
 
+# %% [markdown]
+# The dataset contains around 180GB of uncompressed medical images..
+
+# %%
+
 # %%
 train_mass_df = pd.read_csv(DATASET_ROOT / "mass_case_description_train_set.csv")
 train_mass_df.head()

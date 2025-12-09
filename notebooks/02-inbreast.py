@@ -32,6 +32,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import numpy as np
 import pydicom
+from typedstream.stream import TypedStreamReader
 
 # %% [markdown]
 # ## Metadata File Review
@@ -48,98 +49,6 @@ import pydicom
 
 # %%
 INBREAST_ROOT = Path("../datasets/INbreast Release 1.0")
-
-# %% [markdown]
-# ## ROI File Parsing
-#
-# The ROI files are in Apple/NeXT typedstream binary format. We need to extract
-# the coordinate points that define the region of interest boundaries.
-
-# %%
-def parse_roi_file(roi_path):
-    """
-    Parse an INbreast ROI file and extract coordinate points.
-
-    The ROI files are in Apple/NeXT typedstream binary format containing
-    NSKeyedArchiver serialized objects with coordinate points.
-
-    Args:
-        roi_path: Path to the .roi file
-
-    Returns:
-        dict with:
-            - 'points': List of (x, y) tuples representing the ROI boundary
-            - 'roi_type': Type of ROI (e.g., 'Mass')
-            - 'raw_data': Raw bytes for debugging
-    """
-    if not roi_path.exists():
-        return None
-
-    # Read the binary file
-    file_bytes = roi_path.read_bytes()
-
-    # Convert bytes to string (ignoring errors for binary data)
-    file_str = file_bytes.decode('latin-1')
-
-    # Extract coordinate points using regex
-    # Points are in format {x, y}
-    coord_pattern = r'\{([\d.-]+),\s*([\d.-]+)\}'
-    matches = re.findall(coord_pattern, file_str)
-
-    # Convert string coordinates to float tuples
-    points = [(float(x), float(y)) for x, y in matches if not (float(x) == 0 and float(y) == 0)]
-
-    # Try to extract ROI type (e.g., "Mass", "Calcification")
-    roi_type = None
-    type_patterns = ['Mass', 'Calcification', 'Cluster', 'Distortion']
-    for pattern in type_patterns:
-        if pattern in file_str:
-            roi_type = pattern
-            break
-
-    return {
-        'points': points,
-        'roi_type': roi_type,
-        'num_points': len(points),
-        'raw_bytes': file_bytes
-    }
-
-# %%
-def load_roi_for_image(file_name, roi_dir):
-    """
-    Load ROI data for a specific image file.
-
-    Args:
-        file_name: Image file name (without extension)
-        roi_dir: Path to the AllROI directory
-
-    Returns:
-        Parsed ROI data or None if not found
-    """
-    roi_file = roi_dir / f"{file_name}.roi"
-    if roi_file.exists():
-        return parse_roi_file(roi_file)
-    return None
-
-# %%
-def get_all_rois(inbreast_df, roi_dir):
-    """
-    Load all ROI files for images in the dataframe.
-
-    Args:
-        inbreast_df: DataFrame with INbreast metadata
-        roi_dir: Path to the AllROI directory
-
-    Returns:
-        Dictionary mapping file names to ROI data
-    """
-    rois = {}
-    for _, row in inbreast_df.iterrows():
-        file_name = str(row['File Name'])
-        roi_data = load_roi_for_image(file_name, roi_dir)
-        if roi_data:
-            rois[file_name] = roi_data
-    return rois
 
 # %%
 inbreast_df = pd.read_csv(INBREAST_ROOT / "INbreast.csv", sep=";")
@@ -216,16 +125,22 @@ print(f"ROI file exists: {roi_file.exists()}")
 # %%
 roi_file
 
-# %%
-import re
-from typedstream.stream import TypedStreamReader
 
+# %% [markdown]
+# ### Parse and visualise region-of-interest
+#
+# The ROIs from InBreast were made by MacOSX application OsiriX, and are in Apple/NeXT typedstream binary format.
+#
+# We can use the TypedStreamReader from the https://github.com/dgelessus/python-typedstream library.
+
+# %%
 def parse_point_string(s: bytes) -> tuple[float, float] | None:
     """Parse '{x, y}' format into tuple."""
     match = re.match(rb'\{([\d.]+),\s*([\d.]+)\}', s)
     if match:
         return float(match.group(1)), float(match.group(2))
     return None
+
 
 def extract_rois(data):
     rois = []
@@ -289,7 +204,7 @@ plt.tight_layout()
 plt.show()
 
 # %% [markdown]
-# ### Parse and visualise region-of-interest
+#
 
 # %% [markdown]
 # I create some help functions to explore the 
