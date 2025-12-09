@@ -306,6 +306,7 @@ def main():
     # Initialize wandb
     wandb.init(
         project="cm3070-mammography",
+        entity="lex",
         name=args.run_name,
         config={
             "batch_size": BATCH_SIZE,

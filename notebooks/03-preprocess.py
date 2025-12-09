@@ -146,6 +146,18 @@ plt.axis('off')
 plt.show()
 
 # %% [markdown]
+# ## Otsu's thresholding
+
+# %%
+blurred_img = cv2.GaussianBlur(mlo_img, (5, 5), 0)
+_, breast_mask = cv2.threshold(blurred_img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+morph_img = apply_morphological_transforms(breast_mask)
+plt.figure(figsize=(6, 6))
+plt.imshow(morph_img, cmap="gray")
+plt.axis('off')
+plt.show()
+
+# %% [markdown]
 # ## Create breast region of interest
 
 # %%
@@ -170,6 +182,7 @@ img_cropped = mlo_img[y:y+h, x:x+w]
 
 plt.figure(figsize=(6, 6))
 plt.imshow(img_cropped, cmap="gray")
+plt.axis('off')
 plt.show()
 
 # %% [markdown]
@@ -181,7 +194,15 @@ target_size = 512
 # %%
 img_final = cv2.resize(img_cropped, (target_size, target_size))
 plt.imshow(img_final, cmap="grey")
+plt.axis('off')
 plt.show()
+
+# %% [markdown]
+# Normalise and convert to RGB.
+
+# %%
+img_normalized = ((img_final - img_final.min()) / (img_final.max() - img_final.min()) * 255).astype(np.uint8)
+img_rgb = np.stack([img_normalized] * 3, axis=-1)
 
 # %% [markdown]
 # ## Augmentation pipeline
@@ -190,13 +211,6 @@ plt.show()
 # then resized to 224x224 for model input.
 
 # %%
-# Normalize 16-bit DICOM to 8-bit (0-255) range
-img_normalized = ((img_final - img_final.min()) / (img_final.max() - img_final.min()) * 255).astype(np.uint8)
-
-# Convert to RGB (3 channels) as expected by the model
-img_rgb = np.stack([img_normalized] * 3, axis=-1)
-
-# Get the training transform (augments at 512, outputs at 224)
 train_transform = get_train_transform(aug_size=512, output_size=224)
 
 # %%
@@ -204,14 +218,9 @@ train_transform = get_train_transform(aug_size=512, output_size=224)
 fig, axes = plt.subplots(2, 4, figsize=(16, 8))
 axes = axes.flatten()
 
-axes[0].imshow(img_rgb)
-axes[0].set_title("Original (512x512)")
-axes[0].axis('off')
-
-for i in range(1, 8):
+for i in range(0, 8):
     augmented = train_transform(image=img_rgb)['image']
     axes[i].imshow(augmented)
-    axes[i].set_title(f"Augmented {i} (224x224)")
     axes[i].axis('off')
 
 plt.tight_layout()
@@ -238,3 +247,5 @@ axes[1].axis('off')
 
 plt.tight_layout()
 plt.show()
+
+# %%

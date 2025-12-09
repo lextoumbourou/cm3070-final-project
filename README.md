@@ -60,6 +60,18 @@ Test the CBIS-DDSM.
 
 ```
 uv run src/inference.py --model-name resnet50 --weights checkpoints/cbis-baseline/best_model.npz --data-dir datasets/prep/cbis-ddsm
+==================================================
+RESULTS
+==================================================
+AUC:         0.6866
+Sensitivity: 0.4783 (TPR, Recall)
+Specificity: 0.7547 (TNR)
+Accuracy:    0.6463
+--------------------------------------------------
+Confusion Matrix (threshold=0.5):
+  TP:  132  FN:  144
+  FP:  105  TN:  323
+==================================================
 ```
 
 Test InBreast test set.
