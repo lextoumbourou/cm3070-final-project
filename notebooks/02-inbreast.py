@@ -13,7 +13,12 @@
 # ---
 
 # %% [markdown]
-# # INbreast EDA
+# # INBreast EDA
+
+# %% [markdown]
+# This notebook describes my exploratory dataset analysis of the INBreast dataset (Moreira et al. (2012))
+#
+# Firstly, we import some libraries used throughout the notebook.
 
 # %% [markdown]
 # ## Imports
@@ -166,8 +171,11 @@ for col in inbreast_df.columns:
 # I'll take a look at one example of each.
 
 # %%
+inbreast_df
+
+# %%
 # Get a sample image
-sample_row = inbreast_df[inbreast_df.View == "MLO"].iloc[0]
+sample_row = inbreast_df[(inbreast_df.View == "MLO") & (inbreast_df["Bi-Rads"] == "5")].iloc[0]
 sample_filename = sample_row['File Name']
 print(f"Sample image filename: {sample_filename}")
 
@@ -205,58 +213,98 @@ roi_file = INBREAST_ROOT / "AllROI" / (str(file_name) + ".roi")
 print(f"ROI file: {roi_file}")
 print(f"ROI file exists: {roi_file.exists()}")
 
+# %%
+roi_file
+
+# %%
+import re
+from typedstream.stream import TypedStreamReader
+
+def parse_point_string(s: bytes) -> tuple[float, float] | None:
+    """Parse '{x, y}' format into tuple."""
+    match = re.match(rb'\{([\d.]+),\s*([\d.]+)\}', s)
+    if match:
+        return float(match.group(1)), float(match.group(2))
+    return None
+
+def extract_rois(data):
+    rois = []
+    current_roi = None
+    points = []
+    label = None
+    
+    for item in data:
+        item_str = str(item)
+        
+        # Detect ROI class start
+        if 'class ROI' in item_str:
+            if current_roi:
+                rois.append(current_roi)
+            current_roi = {'points': [], 'label': None, 'properties': []}
+            points = []
+            
+        # Extract point coordinates
+        if isinstance(item, bytes) and item.startswith(b'{') and b',' in item:
+            point = parse_point_string(item)
+            if point and current_roi:
+                current_roi['points'].append(point)
+                
+        # Extract labels (Calcification, Mass, etc.)
+        if isinstance(item, bytes) and item in (b'Calcification', b'Mass'):
+            if current_roi:
+                current_roi['label'] = item.decode()
+    
+    if current_roi:
+        rois.append(current_roi)
+    
+    return rois
+
+# Usage
+reader = TypedStreamReader.from_data(roi_file.read_bytes())
+items = list(reader)  # Flatten to list first
+rois = extract_rois(items)
+
+for i, roi in enumerate(rois):
+    print(f"ROI {i}: {roi['label']} - {len(roi['points'])} points")
+
+# %%
+fig, ax = plt.subplots(figsize=(4, 4))
+
+# Display the mammogram
+ax.imshow(img_array, cmap='gray')
+
+# Overlay the ROI
+if roi['points']:
+    roi_points = np.array([(a, b) for (a, b) in roi['points'] if a and b])
+    # Close the polygon by connecting last point to first
+    roi_points = np.vstack([roi_points, roi_points[0]])
+
+    ax.plot(roi_points[:, 0], roi_points[:, 1], 'r-', linewidth=2, label='ROI boundary')
+    ax.plot(roi_points[:, 0], roi_points[:, 1], 'r.', markersize=4)
+
+ax.set_title(f"Image: {sample_filename} | BI-RADS: {sample_row['Bi-Rads']} | ROI Label: {roi['label']}")
+ax.legend()
+ax.axis('off')
+plt.tight_layout()
+plt.show()
+
 # %% [markdown]
-# ### Parse and visualize region-of-interest
+# ### Parse and visualise region-of-interest
 
-# %%
-# Parse the ROI file
-if roi_file.exists():
-    roi_data = parse_roi_file(roi_file)
-    if roi_data:
-        print(f"ROI Type: {roi_data['roi_type']}")
-        print(f"Number of points: {roi_data['num_points']}")
-        print(f"\nFirst 5 points:")
-        for i, (x, y) in enumerate(roi_data['points'][:5]):
-            print(f"  Point {i}: ({x:.2f}, {y:.2f})")
-    else:
-        print("Failed to parse ROI file")
-else:
-    print("ROI file not found")
-
-# %%
-# Visualize the DICOM image with ROI overlay
-if dicom_path.exists() and roi_file.exists() and roi_data:
-    fig, ax = plt.subplots(figsize=(12, 12))
-
-    # Display the mammogram
-    ax.imshow(img_array, cmap='gray')
-
-    # Overlay the ROI
-    if roi_data['points']:
-        roi_points = np.array(roi_data['points'])
-        # Close the polygon by connecting last point to first
-        roi_points = np.vstack([roi_points, roi_points[0]])
-
-        ax.plot(roi_points[:, 0], roi_points[:, 1], 'r-', linewidth=2, label='ROI boundary')
-        ax.plot(roi_points[:, 0], roi_points[:, 1], 'r.', markersize=4)
-
-    ax.set_title(f"Image: {sample_filename} | BI-RADS: {sample_row['Bi-Rads']} | ROI Type: {roi_data['roi_type']}")
-    ax.legend()
-    ax.axis('off')
-    plt.tight_layout()
-    plt.show()
+# %% [markdown]
+# I create some help functions to explore the 
 
 # %%
 # Visualize with bounding box
-if dicom_path.exists() and roi_file.exists() and roi_data:
-    fig, ax = plt.subplots(figsize=(12, 12))
+if dicom_path.exists() and roi_file.exists():
+    fig, ax = plt.subplots(figsize=(4, 4))
 
     # Display the mammogram
     ax.imshow(img_array, cmap='gray')
 
     # Overlay the bounding box
-    if roi_data['points']:
-        roi_points = np.array(roi_data['points'])
+    if roi['points']:
+        roi_points = np.array([(a, b) for (a, b) in roi['points'] if a and b])
 
         # Calculate bounding box
         x_min, y_min = roi_points.min(axis=0)
@@ -274,34 +322,6 @@ if dicom_path.exists() and roi_file.exists() and roi_data:
     ax.axis('off')
     plt.tight_layout()
     plt.show()
-
-# %%
-# Get a sample image
-sample_row = inbreast_df[inbreast_df.View == "CC"].iloc[0]
-sample_filename = sample_row['File Name']
-print(f"Sample image filename: {sample_filename}")
-
-# %%
-# Construct the DICOM file path
-dicom_path = files = list((INBREAST_ROOT / "AllDICOMs").rglob(f"{sample_filename}*.dcm"))[0]
-print(f"DICOM path: {dicom_path}")
-print(f"File exists: {dicom_path.exists()}")
-
-# %%
-# Load the DICOM file
-if dicom_path.exists():
-    dicom_data = pydicom.dcmread(dicom_path)
-    img_array = dicom_data.pixel_array
-
-    # Display the image
-    plt.figure(figsize=(10, 10))
-    plt.imshow(img_array, cmap='gray')
-    plt.title(f"Sample Image - {sample_filename}\nBI-RADS: {sample_row['Bi-Rads']}, ACR: {sample_row['ACR']}")
-    plt.axis('off')
-    plt.show()
-
-    print(f"Image shape: {img_array.shape}")
-    print(f"Pixel value range: [{img_array.min()}, {img_array.max()}]")
 
 # %% [markdown]
 # ## EDA
