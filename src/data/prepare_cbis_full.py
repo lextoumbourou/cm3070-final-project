@@ -3,9 +3,13 @@ CBIS-DDSM dataset preparation script
 
 This script prepares the CBIS-DDSM dataset for training by:
 1. Loading mass and calcification case descriptions
-2. Preprocessing full mammogram images (crop and resize to grayscale)
+2. Preprocessing images (crop and resize to grayscale)
 3. Using the official test split and creating a validation split from training data
 4. Saving processed images and metadata CSVs
+
+Supports two modes:
+- full: Extract full mammograms with automatic breast region detection
+- roi: Extract pre-cropped ROI abnormality images (higher resolution on lesion)
 """
 
 from pathlib import Path
