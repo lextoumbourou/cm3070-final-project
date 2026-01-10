@@ -137,3 +137,22 @@ Confusion Matrix (threshold=0.5):
   FP:    0  TN:   46
 ==================================================
 ```
+
+## ROI
+
+```
+uv run train --model-name resnet50 --run-name cbis-roi-exp1 --data-dir datasets/prep/cbis-ddsm-roi
+uv run src/inference.py --model-name resnet50 --weights checkpoints/cbis-roi-exp1/best_model.npz --data-dir datasets/prep/cbis-ddsm-roi
+==================================================
+RESULTS
+==================================================
+AUC:         0.7363
+Sensitivity: 0.5254 (TPR, Recall)
+Specificity: 0.7921 (TNR)
+Accuracy:    0.6875
+--------------------------------------------------
+Confusion Matrix (threshold=0.5):
+  TP:  145  FN:  131
+  FP:   89  TN:  339
+==================================================
+```
