@@ -47,6 +47,12 @@ IMG_ROOT = DATASET_ROOT / "CBIS-DDSM"
 # The dataset was downloaded from from https://www.cancerimagingarchive.net/collection/cbis-ddsm.
 #
 # It is a 164GB compressed dataset which uncompresses to around 180GB.
+#
+# The CSV provided by the original authors actually has a number of issues. In the image dataset, the DICOM images are named as `1-1.dcm` or `1-2.dcm`, but in the description files (CSV), they are named as `000000.dcm` or `000001.dcm`. Confusingly, the `000000.dcm` and `000001.dcm` are not consistently mapped to `1-1.dcm` or `1-2.dcm` files.
+#
+# Andrés Sarmiento wrote some scripts that fixes these issues, actually resorting to integorgating the mask files to determine if they're crops or masks. The repo is here: https://gitlab.com/ACSG-64/cbis-ddsm-description-correction-and-verification-tool/-/tree/main?ref_type=heads
+#
+# He provides a corrected version of the dataset here, which I'm using in this notebook, as a substitute for the official `.csv` data: https://huggingface.co/datasets/ACSG-64/CBIS-DDSM-description-corrected
 
 # %%
 # !cd {DATASET_ROOT} && du -sh *
@@ -119,7 +125,7 @@ plt.show()
 # Let's have a closer look at one patient id to start with. Later we'll try to understand stastics for all patient ids.
 
 # %%
-patient_5 = all_df[all_df.patient_id == "P_00005"]
+patient_5 = all_df[all_df.patient_id == "P_00065"]
 
 # %%
 patient_5
@@ -146,12 +152,23 @@ class DCMData(BaseModel):
     subject_id: str
     study_uid: str
     series_uid: str
+    dcm_file: str
     
 
 def get_file_data_from_dcm(dcm_path: Path):
     data = str(dcm_path).strip().split("/")
-    return DCMData(subject_id=data[0], study_uid=data[1], series_uid=data[2])
+    dcm_og = data[-1].strip().split(".")[0]
+    return DCMData(subject_id=data[0], study_uid=data[1], series_uid=data[2], dcm_file=dcm_og)
 
+
+# %%
+patient_5_row["cropped image file path"]
+
+# %%
+patient_5_row["ROI mask file path"]
+
+# %%
+patient_5_row["image file path"]
 
 # %%
 patient_5_cropped_file = get_file_data_from_dcm(patient_5_row["cropped image file path"])
@@ -164,17 +181,21 @@ patient_5_cropped_file, patient_5_roi_mask_file, patient_5_image_file
 # Now we can query the metadata to find the actual file locations.
 
 # %%
-def get_meta_from_dcm_data(dcm_data: DCMData):
+def get_filepath_from_dcm_data(dcm_data: DCMData):
     cropped_meta = metadata_df[
         (metadata_df["Subject ID"] == dcm_data.subject_id) &
         (metadata_df["Series UID"] == dcm_data.series_uid) &
         (metadata_df["Study UID"] == dcm_data.study_uid)
     ].iloc[0]
-    return cropped_meta
+    file_location = cropped_meta["File Location"]
+    return DATASET_ROOT / Path(file_location) / (dcm_data.dcm_file + ".dcm")
 
-meta_img = get_meta_from_dcm_data(patient_5_image_file)
-meta_cropped = get_meta_from_dcm_data(patient_5_cropped_file)
-meta_roi = get_meta_from_dcm_data(patient_5_roi_mask_file)
+meta_img_path = get_filepath_from_dcm_data(patient_5_image_file)
+meta_cropped_path = get_filepath_from_dcm_data(patient_5_cropped_file)
+meta_roi_mask_path = get_filepath_from_dcm_data(patient_5_roi_mask_file)
+
+# %%
+meta_img_path, meta_cropped_path, meta_roi_mask_path
 
 
 # %% [markdown]
@@ -187,33 +208,13 @@ def get_img_from_file_location(file_location: Path):
 
 
 # %%
-img_path = get_img_from_file_location(DATASET_ROOT / meta_img['File Location'])
-
-ds = pydicom.dcmread(img_path)
+ds = pydicom.dcmread(meta_img_path)
 img = ds.pixel_array
 
 plt.figure(figsize=(6, 6))
 plt.imshow(img, cmap="gray")
 plt.axis("off")
 plt.show()
-
-
-# %% [markdown]
-# For ROI mask, and the cropped image, it's contained in the same folder:
-
-# %%
-# !ls -l "{DATASET_ROOT / meta_cropped['File Location']}"
-
-# %%
-def get_roi_mask_from_file_location(file_location: Path):
-    files = list(file_location.glob("*.dcm"))
-    mask = [m for m in files if m.stem == '1-1']
-    crop = [m for m in files if m.stem == '1-2']
-    return mask[0], crop[0]
-
-
-# %%
-mask_file, crop_file = get_roi_mask_from_file_location(DATASET_ROOT / meta_cropped['File Location'])
 
 
 # %%
@@ -241,8 +242,8 @@ def dicom_to_array(file):
 
 
 # %%
-mask_img = dicom_to_array(mask_file)
-crop_img = dicom_to_array(crop_file)
+mask_img = dicom_to_array(meta_roi_mask_path)
+crop_img = dicom_to_array(meta_cropped_path)
 
 show_img_grid(mask_img, crop_img)
 
@@ -270,20 +271,10 @@ plt.show()
 # %%
 def get_patient_imgs_from_row(row):
     dcm_data_img = get_file_data_from_dcm(row["image file path"])
-    img_meta = get_meta_from_dcm_data(dcm_data_img)
-    img_path = get_img_from_file_location(DATASET_ROOT / img_meta["File Location"])
+    img_path = get_filepath_from_dcm_data(dcm_data_img)
 
-    cropped_data_roi = get_file_data_from_dcm(row["cropped image file path"])
-    cropped_meta = get_meta_from_dcm_data(cropped_data_roi)
-
-    dcm_data_roi = get_file_data_from_dcm(row["ROI mask file path"])
-    mask_meta = get_meta_from_dcm_data(dcm_data_roi)
-
-    if cropped_meta["File Location"] == mask_meta["File Location"]:
-        mask_file, crop_file = get_roi_mask_from_file_location(DATASET_ROOT / cropped_meta["File Location"])
-    else:
-        mask_file = get_img_from_file_location(DATASET_ROOT / mask_meta["File Location"])
-        crop_file = get_img_from_file_location(DATASET_ROOT / cropped_meta["File Location"])
+    crop_file = get_filepath_from_dcm_data(get_file_data_from_dcm(row["cropped image file path"]))
+    mask_file = get_filepath_from_dcm_data(get_file_data_from_dcm(row["ROI mask file path"]))
 
     return img_path, mask_file, crop_file
 
