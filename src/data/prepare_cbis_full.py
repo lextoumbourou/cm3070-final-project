@@ -40,6 +40,7 @@ class DCMData(BaseModel):
     subject_id: str
     study_uid: str
     series_uid: str
+    dcm_file: str
 
 
 def load_and_combine_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -110,38 +111,32 @@ def split_by_patient(
 
 
 def get_file_data_from_dcm(dcm_path: str) -> DCMData:
-    """Parse DICOM file path to extract subject_id, study_uid, and series_uid."""
+    """Parse DICOM file path to extract subject_id, study_uid, series_uid, and filename."""
     data = str(dcm_path).strip().split("/")
-    return DCMData(subject_id=data[0], study_uid=data[1], series_uid=data[2])
+    dcm_file = data[-1].strip().split(".")[0]
+    return DCMData(subject_id=data[0], study_uid=data[1], series_uid=data[2], dcm_file=dcm_file)
 
 
-def get_meta_from_dcm_data(dcm_data: DCMData, metadata_df: pd.DataFrame) -> pd.Series:
-    """Look up metadata row from parsed DCM data."""
+def get_filepath_from_dcm_data(dcm_data: DCMData, metadata_df: pd.DataFrame) -> Path:
+    """
+    Get the full file path from parsed DCM data.
+
+    Uses corrected CSV which has the correct filenames, so we can directly
+    construct the path: DATASET_ROOT / File Location / dcm_file.dcm
+    """
     meta = metadata_df[
         (metadata_df["Subject ID"] == dcm_data.subject_id) &
         (metadata_df["Series UID"] == dcm_data.series_uid) &
         (metadata_df["Study UID"] == dcm_data.study_uid)
     ].iloc[0]
-    return meta
-
-
-def get_img_from_file_location(file_location: Path) -> Path:
-    """Get the DICOM file from a directory."""
-    files = list(file_location.glob("*.dcm"))
-    return files[0]
+    file_location = meta["File Location"]
+    return RAW_DATA_ROOT / Path(file_location) / (dcm_data.dcm_file + ".dcm")
 
 
 def dicom_to_array(file_path: Path) -> np.ndarray:
     """Load a DICOM file and return as numpy array."""
     ds = pydicom.dcmread(file_path)
     return ds.pixel_array
-
-
-def get_img_path(img_path_str: str, metadata_df: pd.DataFrame) -> Path:
-    """Get the full image path from the image file path string."""
-    dcm_data = get_file_data_from_dcm(img_path_str)
-    img_meta = get_meta_from_dcm_data(dcm_data, metadata_df)
-    return get_img_from_file_location(RAW_DATA_ROOT / img_meta["File Location"])
 
 
 def apply_morphological_transforms(thresh_frame, iterations: int = 2):
@@ -187,28 +182,57 @@ def preprocess_mammogram(img: np.ndarray, target_size=TARGET_SIZE):
     img_final = cv2.resize(img_normalized, (target_size, target_size))
     return img_final
 
+
+def preprocess_roi(img: np.ndarray, target_size=TARGET_SIZE):
+    """Preprocess ROI image: normalize and resize (no cropping needed)."""
+    # Normalize to 0-255 range for saving as PNG
+    if img.dtype != np.uint8:
+        img_normalized = ((img - img.min()) / (img.max() - img.min()) * 255).astype(np.uint8)
+    else:
+        img_normalized = img
+
+    img_final = cv2.resize(img_normalized, (target_size, target_size))
+    return img_final
+
+
 def process_case(
     row: pd.Series,
     metadata_df: pd.DataFrame,
     abnormality_category: str,
     output_dir: Path,
     case_idx: int,
+    mode: str = "full",
+    target_size: int = TARGET_SIZE,
 ) -> dict:
-    image_path_str = row["image file path"]
+    """
+    Process a single case.
+
+    Args:
+        mode: "full" for full mammogram with breast extraction,
+              "roi" for pre-cropped ROI abnormality images
+    """
+    if mode == "full":
+        image_path_str = row["image file path"]
+    else:  # roi mode
+        image_path_str = row["cropped image file path"]
 
     try:
-        dicom_path = get_img_path(image_path_str, metadata_df)
-    except (IndexError, KeyError):
-        logger.warning(f"No metadata match found for: {image_path_str}")
+        dcm_data = get_file_data_from_dcm(image_path_str)
+        dicom_path = get_filepath_from_dcm_data(dcm_data, metadata_df)
+    except (IndexError, KeyError) as e:
+        logger.warning(f"No metadata match found for: {image_path_str} - {e}")
         return None
 
     if not dicom_path.exists():
-        logger.warning(f"Image file not found: {dicom_path}")
+        logger.warning(f"DICOM file not found: {dicom_path}")
         return None
 
     try:
         img = dicom_to_array(dicom_path)
-        img_processed = preprocess_mammogram(img)
+        if mode == "full":
+            img_processed = preprocess_mammogram(img, target_size)
+        else:  # roi mode
+            img_processed = preprocess_roi(img, target_size)
     except Exception as e:
         logger.warning(f"Failed to preprocess {dicom_path}: {e}")
         return None
@@ -217,8 +241,9 @@ def process_case(
     breast_side = row["left or right breast"]
     image_view = row["image view"]
     pathology = row["pathology"]
+    abnormality_id = row.get("abnormality id", 1)
 
-    filename = f"{case_idx:05d}_{patient_id}_{breast_side}_{image_view}_{abnormality_category}_{pathology}.png"
+    filename = f"{case_idx:05d}_{patient_id}_{breast_side}_{image_view}_{abnormality_category}_{abnormality_id}_{pathology}.png"
     output_path = output_dir / filename
 
     cv2.imwrite(str(output_path), img_processed)
@@ -231,6 +256,7 @@ def process_case(
         "breast_side": breast_side,
         "image_view": image_view,
         "abnormality_category": abnormality_category,
+        "abnormality_id": abnormality_id,
         "pathology": pathology,
         "label": label,
         "assessment": row.get("assessment", None),
@@ -253,6 +279,9 @@ def process_and_save_split(
     split_name: str,
     metadata_df: pd.DataFrame,
     img_output_dir: Path,
+    output_root: Path,
+    mode: str = "full",
+    target_size: int = TARGET_SIZE,
 ) -> pd.DataFrame:
     """
     Process all cases in a split and save metadata
@@ -262,11 +291,14 @@ def process_and_save_split(
         split_name: Name of the split (train/val/test)
         metadata_df: Metadata DataFrame for image lookup
         img_output_dir: Directory to save processed images
+        output_root: Root directory for CSV output
+        mode: "full" or "roi"
+        target_size: Target image size
 
     Returns:
         DataFrame with processed case metadata
     """
-    logger.info(f"Processing {split_name} split...")
+    logger.info(f"Processing {split_name} split ({mode} mode)...")
 
     processed_cases = []
 
@@ -275,7 +307,8 @@ def process_and_save_split(
     ):
         abnormality_category = row["abnormality_category"]
         metadata = process_case(
-            row, metadata_df, abnormality_category, img_output_dir, idx
+            row, metadata_df, abnormality_category, img_output_dir, idx,
+            mode=mode, target_size=target_size
         )
 
         if metadata is not None:
@@ -283,8 +316,8 @@ def process_and_save_split(
 
     result_df = pd.DataFrame(processed_cases)
 
-    # Save CSV to OUTPUT_ROOT
-    csv_path = OUTPUT_ROOT / f"{split_name}.csv"
+    # Save CSV to output_root
+    csv_path = output_root / f"{split_name}.csv"
     result_df.to_csv(csv_path, index=False)
     logger.info(f"Saved {split_name} metadata to {csv_path}")
 
@@ -298,6 +331,14 @@ def process_and_save_split(
 def main():
     parser = argparse.ArgumentParser(description="Prepare CBIS-DDSM dataset")
     parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["full", "roi"],
+        default="full",
+        help="Extraction mode: 'full' for full mammograms with breast detection, "
+             "'roi' for pre-cropped ROI abnormality images (default: full)",
+    )
+    parser.add_argument(
         "--val-ratio",
         type=float,
         default=0.1,
@@ -309,17 +350,32 @@ def main():
         default=42,
         help="Random seed for reproducibility (default: 42)",
     )
+    parser.add_argument(
+        "--target-size",
+        type=int,
+        default=TARGET_SIZE,
+        help=f"Target image size in pixels (default: {TARGET_SIZE})",
+    )
 
     args = parser.parse_args()
 
-    logger.info("Starting CBIS-DDSM dataset preparation...")
-    logger.info(f"Target image size: {TARGET_SIZE}")
+    # Set output directory based on mode
+    if args.mode == "full":
+        output_root = Path("datasets/prep/cbis-ddsm")
+    else:
+        output_root = Path("datasets/prep/cbis-ddsm-roi")
+
+    img_output_dir = output_root / "img"
+
+    logger.info(f"Starting CBIS-DDSM dataset preparation ({args.mode} mode)...")
+    logger.info(f"Target image size: {args.target_size}")
+    logger.info(f"Output directory: {output_root}")
     logger.info(
         f"Using official test split and creating validation split with ratio: {args.val_ratio}"
     )
 
-    OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
-    IMG_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    output_root.mkdir(parents=True, exist_ok=True)
+    img_output_dir.mkdir(parents=True, exist_ok=True)
 
     train_all_df, test_df, metadata_df = load_and_combine_data()
 
@@ -329,16 +385,21 @@ def main():
     )
 
     train_metadata = process_and_save_split(
-        train_df, "train", metadata_df, IMG_OUTPUT_DIR
+        train_df, "train", metadata_df, img_output_dir, output_root,
+        mode=args.mode, target_size=args.target_size
     )
-    val_metadata = process_and_save_split(val_df, "val", metadata_df, IMG_OUTPUT_DIR)
+    val_metadata = process_and_save_split(
+        val_df, "val", metadata_df, img_output_dir, output_root,
+        mode=args.mode, target_size=args.target_size
+    )
     test_metadata = process_and_save_split(
-        test_df, "test", metadata_df, IMG_OUTPUT_DIR
+        test_df, "test", metadata_df, img_output_dir, output_root,
+        mode=args.mode, target_size=args.target_size
     )
 
     logger.info("CBIS-DDSM dataset preparation complete!")
-    logger.info(f"Processed images saved to: {IMG_OUTPUT_DIR}")
-    logger.info(f"Metadata CSVs saved to: {OUTPUT_ROOT}")
+    logger.info(f"Processed images saved to: {img_output_dir}")
+    logger.info(f"Metadata CSVs saved to: {output_root}")
 
 
 if __name__ == "__main__":
