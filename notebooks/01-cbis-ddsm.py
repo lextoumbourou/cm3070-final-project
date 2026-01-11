@@ -52,7 +52,7 @@ IMG_ROOT = DATASET_ROOT / "CBIS-DDSM"
 #
 # Andrés Sarmiento wrote some scripts that fixes these issues, actually resorting to integorgating the mask files to determine if they're crops or masks. The repo is here: https://gitlab.com/ACSG-64/cbis-ddsm-description-correction-and-verification-tool/-/tree/main?ref_type=heads
 #
-# He provides a corrected version of the dataset here, which I'm using in this notebook, as a substitute for the official `.csv` data: https://huggingface.co/datasets/ACSG-64/CBIS-DDSM-description-corrected
+# He provides a corrected version of the dataset here, which I'm using in this notebook (in folder `fixed-csv`), as a substitute for the official `.csv` data: https://huggingface.co/datasets/ACSG-64/CBIS-DDSM-description-corrected
 
 # %%
 # !cd {DATASET_ROOT} && du -sh *
@@ -68,15 +68,15 @@ IMG_ROOT = DATASET_ROOT / "CBIS-DDSM"
 # Here we load each file, then concat together to give us one dataset file per split.
 
 # %%
-train_mass_df = pd.read_csv(DATASET_ROOT / "mass_case_description_train_set.csv")
-train_calc_df = pd.read_csv(DATASET_ROOT / "calc_case_description_train_set.csv")
+train_mass_df = pd.read_csv(DATASET_ROOT / "fixed-csv" / "mass_case_description_train_set.csv")
+train_calc_df = pd.read_csv(DATASET_ROOT / "fixed-csv" / "calc_case_description_train_set.csv")
 train_df = pd.concat([train_mass_df, train_calc_df])
 train_mass_df = train_calc_df = None
 train_df.head(1)
 
 # %%
-test_mass_df = pd.read_csv(DATASET_ROOT / "mass_case_description_test_set.csv")
-test_calc_df = pd.read_csv(DATASET_ROOT / "calc_case_description_test_set.csv")
+test_mass_df = pd.read_csv(DATASET_ROOT / "fixed-csv" /  "mass_case_description_test_set.csv")
+test_calc_df = pd.read_csv(DATASET_ROOT / "fixed-csv" /  "calc_case_description_test_set.csv")
 test_df = pd.concat([test_mass_df, test_calc_df])
 test_mass_df = test_mass_df = None
 test_df.head(1)
@@ -644,5 +644,3 @@ axes[2].legend()
 plt.tight_layout()
 plt.show()
 
-
-# %%
