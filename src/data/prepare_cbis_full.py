@@ -20,10 +20,10 @@ import logging
 import pandas as pd
 import numpy as np
 import cv2
-import pydicom
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
-from pydantic import BaseModel
+
+from src.data.cbis_ddsm import DCMData, parse_dcm_path, resolve_dcm_path, load_dicom_array
 
 
 logging.basicConfig(
@@ -37,14 +37,6 @@ RAW_DATA_ROOT = Path("datasets/CBIS-DDSM")
 IMG_ROOT = RAW_DATA_ROOT / "CBIS-DDSM"
 OUTPUT_ROOT = Path("datasets/prep/cbis-ddsm")
 IMG_OUTPUT_DIR = OUTPUT_ROOT / "img"
-
-
-class DCMData(BaseModel):
-    """Parsed DICOM file path data."""
-    subject_id: str
-    study_uid: str
-    series_uid: str
-    dcm_file: str
 
 
 def load_and_combine_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -114,33 +106,9 @@ def split_by_patient(
     return train_df, val_df
 
 
-def get_file_data_from_dcm(dcm_path: str) -> DCMData:
-    """Parse DICOM file path to extract subject_id, study_uid, series_uid, and filename."""
-    data = str(dcm_path).strip().split("/")
-    dcm_file = data[-1].strip().split(".")[0]
-    return DCMData(subject_id=data[0], study_uid=data[1], series_uid=data[2], dcm_file=dcm_file)
-
-
 def get_filepath_from_dcm_data(dcm_data: DCMData, metadata_df: pd.DataFrame) -> Path:
-    """
-    Get the full file path from parsed DCM data.
-
-    Uses corrected CSV which has the correct filenames, so we can directly
-    construct the path: DATASET_ROOT / File Location / dcm_file.dcm
-    """
-    meta = metadata_df[
-        (metadata_df["Subject ID"] == dcm_data.subject_id) &
-        (metadata_df["Series UID"] == dcm_data.series_uid) &
-        (metadata_df["Study UID"] == dcm_data.study_uid)
-    ].iloc[0]
-    file_location = meta["File Location"]
-    return RAW_DATA_ROOT / Path(file_location) / (dcm_data.dcm_file + ".dcm")
-
-
-def dicom_to_array(file_path: Path) -> np.ndarray:
-    """Load a DICOM file and return as numpy array."""
-    ds = pydicom.dcmread(file_path)
-    return ds.pixel_array
+    """Resolve DICOM file path using metadata lookup."""
+    return resolve_dcm_path(dcm_data, metadata_df, RAW_DATA_ROOT)
 
 
 def apply_morphological_transforms(thresh_frame, iterations: int = 2):
@@ -221,7 +189,7 @@ def process_case(
         image_path_str = row["cropped image file path"]
 
     try:
-        dcm_data = get_file_data_from_dcm(image_path_str)
+        dcm_data = parse_dcm_path(image_path_str)
         dicom_path = get_filepath_from_dcm_data(dcm_data, metadata_df)
     except (IndexError, KeyError) as e:
         logger.warning(f"No metadata match found for: {image_path_str} - {e}")
@@ -232,7 +200,7 @@ def process_case(
         return None
 
     try:
-        img = dicom_to_array(dicom_path)
+        img = load_dicom_array(dicom_path)
         if mode == "full":
             img_processed = preprocess_mammogram(img, target_size)
         else:  # roi mode
