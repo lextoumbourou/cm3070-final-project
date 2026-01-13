@@ -156,3 +156,18 @@ Confusion Matrix (threshold=0.5):
   FP:   89  TN:  339
 ==================================================
 ```
+
+## Patches Training
+
+```
+uv run src/trainer_multiclass.py --model-name resnet50 --run-name cbis-patch-multi --data-dir datasets/prep/cbis-ddsm-patches
+Test Results:
+  Test Loss: 0.7592
+  Test Accuracy: 0.7197
+  Per-class accuracy:
+    Background: 0.8835
+    Benign mass: 0.6195
+    Malignant mass: 0.5265
+    Benign calc: 0.5315
+    Malignant calc: 0.5605
+```

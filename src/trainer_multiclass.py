@@ -1,0 +1,518 @@
+"""
+Multi-class trainer for 5-class patch-based classification.
+
+Classes:
+  0: Background
+  1: Benign mass
+  2: Malignant mass
+  3: Benign calcification
+  4: Malignant calcification
+"""
+
+from pathlib import Path
+from typing import Dict, Optional
+from collections import Counter
+import argparse
+import csv
+import mlx.core as mx
+import mlx.nn as nn
+import mlx.optimizers as optim
+
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent / "vendor" / "mlx-image" / "src"))
+from mlxim.model import create_model
+from mlxim.data import DataLoader
+from mlxim.data._base import Dataset
+from src.model_utils import freeze_backbone
+
+from PIL import Image
+import numpy as np
+import cv2
+import albumentations as A
+import wandb
+
+
+NUM_CLASSES = 5
+CLASS_NAMES = ["Background", "Benign mass", "Malignant mass", "Benign calc", "Malignant calc"]
+
+
+def get_train_transform(aug_size: int = 224, output_size: int = 224):
+    """
+    Training augmentation pipeline.
+
+    For patch-based training, images are already 224x224, so we use lighter augmentations.
+    """
+    return A.Compose([
+        # Flips
+        A.HorizontalFlip(p=0.5),
+        A.VerticalFlip(p=0.5),
+
+        # Rotation - mammograms can have various orientations
+        A.Rotate(limit=25, p=0.5, border_mode=cv2.BORDER_CONSTANT),
+
+        # Intensity variations - simulates exposure differences
+        A.OneOf([
+            A.RandomBrightnessContrast(brightness_limit=0.15, contrast_limit=0.3, p=0.5),
+            A.RandomGamma(gamma_limit=(80, 120), p=0.5),
+        ], p=0.5),
+
+        # Slight zoom/scale variations
+        A.RandomResizedCrop(height=output_size, width=output_size, scale=(0.9, 1.0), p=0.3),
+
+        # Ensure final size
+        A.Resize(height=output_size, width=output_size),
+    ], p=1.0)
+
+
+def get_val_transform(output_size: int = 224):
+    """Get validation/test transform (just resize, no augmentation)."""
+    return A.Compose([
+        A.Resize(height=output_size, width=output_size),
+    ])
+
+
+class CSVDataset(Dataset):
+    """Dataset that loads images from CSV file with filename and label columns."""
+
+    def __init__(
+        self,
+        csv_path: str,
+        img_dir: str,
+        transform=None,
+    ):
+        self.img_dir = Path(img_dir)
+        self.transform = transform
+        self.samples = []
+
+        with open(csv_path, 'r') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                filename = row['filename']
+                label = int(row['label'])
+                self.samples.append((filename, label))
+
+    def __len__(self):
+        return len(self.samples)
+
+    def __getitem__(self, idx):
+        filename, label = self.samples[idx]
+        img_path = self.img_dir / filename
+
+        # Load image (patches are already 224x224)
+        img = Image.open(img_path).convert('RGB')
+        img = np.array(img).astype(np.uint8)
+
+        # Apply albumentations transform
+        if self.transform:
+            img = self.transform(image=img)['image']
+
+        # Normalize to float32 [0, 1]
+        img = img.astype(np.float32) / 255.0
+
+        img = mx.array(img)
+        label = mx.array(label)
+
+        return img, label
+
+
+def compute_class_weights(dataset: CSVDataset) -> mx.array:
+    """
+    Compute inverse frequency weights for class balancing.
+
+    Background will be heavily represented, ROI classes less frequent.
+    Uses inverse frequency: weight = total / (num_classes * class_count)
+    """
+    label_counts = Counter(label for _, label in dataset.samples)
+    total = sum(label_counts.values())
+
+    # Ensure all classes have at least 1 count to avoid division by zero
+    weights = []
+    for i in range(NUM_CLASSES):
+        count = label_counts.get(i, 1)
+        weight = total / (NUM_CLASSES * count)
+        weights.append(weight)
+
+    return mx.array(weights, dtype=mx.float32)
+
+
+class MultiClassTrainer:
+    """Trainer for 5-class patch-based classification."""
+
+    def __init__(
+        self,
+        model: nn.Module,
+        optimizer: optim.Optimizer,
+        class_weights: Optional[mx.array] = None,
+        num_classes: int = NUM_CLASSES
+    ):
+        self.model = model
+        self.optimizer = optimizer
+        self.class_weights = class_weights
+        self.num_classes = num_classes
+
+    def loss_fn(self, model, inputs, targets):
+        logits = model(inputs)
+        if self.class_weights is not None:
+            # Weighted cross-entropy
+            loss = nn.losses.cross_entropy(logits, targets)
+            weights = self.class_weights[targets]
+            loss = mx.mean(loss * weights)
+        else:
+            loss = mx.mean(nn.losses.cross_entropy(logits, targets))
+        return loss
+
+    def train_step(self, inputs, targets):
+        loss_and_grad_fn = nn.value_and_grad(self.model, self.loss_fn)
+        loss, grads = loss_and_grad_fn(self.model, inputs, targets)
+        self.optimizer.update(self.model, grads)
+        mx.eval(self.model.parameters(), self.optimizer.state)
+        return loss
+
+    def compute_metrics(self, logits, targets):
+        """Compute accuracy and per-class metrics."""
+        predictions = mx.argmax(logits, axis=1)
+        correct = mx.sum(predictions == targets)
+        accuracy = correct / len(targets)
+        return accuracy, predictions
+
+    def train_epoch(self, train_loader, epoch):
+        self.model.train()
+        total_loss = 0.0
+        total_samples = 0
+
+        for batch_idx, (inputs, targets) in enumerate(train_loader):
+            loss = self.train_step(inputs, targets)
+
+            batch_size = len(targets)
+            total_loss += loss.item() * batch_size
+            total_samples += batch_size
+
+            if (batch_idx + 1) % 10 == 0:
+                avg_loss = total_loss / total_samples
+                print(f"  Batch {batch_idx + 1}: Loss = {avg_loss:.4f}")
+                wandb.log({
+                    "batch": epoch * len(train_loader) + batch_idx,
+                    "train_loss_batch": avg_loss
+                })
+
+        avg_loss = total_loss / total_samples
+        return {"loss": avg_loss}
+
+    def validate(self, val_loader) -> Dict[str, float]:
+        """Validate and compute per-class metrics."""
+        self.model.eval()
+        total_loss = 0.0
+        total_correct = 0
+        total_samples = 0
+
+        # Per-class tracking
+        class_correct = [0] * self.num_classes
+        class_total = [0] * self.num_classes
+
+        all_predictions = []
+        all_targets = []
+
+        for inputs, targets in val_loader:
+            logits = self.model(inputs)
+            loss = mx.mean(nn.losses.cross_entropy(logits, targets))
+
+            predictions = mx.argmax(logits, axis=1)
+            correct = mx.sum(predictions == targets)
+
+            batch_size = len(targets)
+            total_loss += loss.item() * batch_size
+            total_correct += correct.item()
+            total_samples += batch_size
+
+            # Collect for per-class metrics
+            preds_np = np.array(predictions)
+            targets_np = np.array(targets)
+            all_predictions.extend(preds_np.tolist())
+            all_targets.extend(targets_np.tolist())
+
+            for pred, target in zip(preds_np, targets_np):
+                class_total[target] += 1
+                if pred == target:
+                    class_correct[target] += 1
+
+        avg_loss = total_loss / total_samples
+        accuracy = total_correct / total_samples
+
+        # Per-class accuracy
+        per_class_acc = {}
+        for i in range(self.num_classes):
+            if class_total[i] > 0:
+                per_class_acc[CLASS_NAMES[i]] = class_correct[i] / class_total[i]
+            else:
+                per_class_acc[CLASS_NAMES[i]] = 0.0
+
+        return {
+            "val_loss": avg_loss,
+            "val_accuracy": accuracy,
+            "per_class_accuracy": per_class_acc,
+            "class_totals": class_total,
+            "predictions": all_predictions,
+            "targets": all_targets
+        }
+
+    def fit(
+        self,
+        train_loader,
+        val_loader,
+        num_epochs: int,
+        checkpoint_dir: Optional[Path] = None,
+        unfreeze_epoch: Optional[int] = None,
+        unfreeze_lr: Optional[float] = None
+    ):
+        """Train the model for multiple epochs."""
+        if checkpoint_dir:
+            checkpoint_dir = Path(checkpoint_dir)
+            checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
+        best_val_loss = float('inf')
+
+        for epoch in range(num_epochs):
+            print(f"\nEpoch {epoch + 1}/{num_epochs}")
+            print("-" * 50)
+
+            # Unfreeze and lower learning rate if specified
+            if unfreeze_epoch is not None and epoch == unfreeze_epoch:
+                print(f"\n>>> Unfreezing backbone and setting LR to {unfreeze_lr}")
+                self.model.unfreeze()
+                self.optimizer = optim.Adam(learning_rate=unfreeze_lr)
+
+            # Training
+            train_metrics = self.train_epoch(train_loader, epoch)
+            print(f"Training Loss: {train_metrics['loss']:.4f}")
+
+            # Validation
+            val_metrics = self.validate(val_loader)
+            print(f"Validation Loss: {val_metrics['val_loss']:.4f}")
+            print(f"Validation Accuracy: {val_metrics['val_accuracy']:.4f}")
+            print("Per-class accuracy:")
+            for class_name, acc in val_metrics['per_class_accuracy'].items():
+                print(f"  {class_name}: {acc:.4f}")
+
+            # Log to wandb
+            log_dict = {
+                "epoch": epoch + 1,
+                "train_loss": train_metrics['loss'],
+                "val_loss": val_metrics['val_loss'],
+                "val_accuracy": val_metrics['val_accuracy'],
+                "learning_rate": self.optimizer.learning_rate.item() if hasattr(self.optimizer.learning_rate, 'item') else self.optimizer.learning_rate
+            }
+            for class_name, acc in val_metrics['per_class_accuracy'].items():
+                log_dict[f"val_acc_{class_name.replace(' ', '_')}"] = acc
+
+            wandb.log(log_dict)
+
+            # Save best model
+            if checkpoint_dir and val_metrics['val_loss'] < best_val_loss:
+                best_val_loss = val_metrics['val_loss']
+                checkpoint_path = checkpoint_dir / "best_model.npz"
+                self.model.save_weights(str(checkpoint_path))
+                print(f"Saved best model to {checkpoint_path}")
+
+
+def main():
+    """Main training script."""
+    parser = argparse.ArgumentParser(
+        description="Train 5-class patch-based model on CBIS-DDSM patches"
+    )
+    parser.add_argument(
+        "--model-name",
+        type=str,
+        help="Name of the model to use",
+        required=True
+    )
+    parser.add_argument(
+        "--run-name",
+        type=str,
+        help="Name for this training run (used for checkpoint directory)",
+        required=True
+    )
+    parser.add_argument(
+        "--data-dir",
+        type=str,
+        help="Path to patch data directory (datasets/prep/cbis-ddsm-patches)",
+        required=True
+    )
+    parser.add_argument(
+        "--weights",
+        type=str,
+        help="Path to pretrained weights (.npz) to load before training",
+        default=None
+    )
+    parser.add_argument(
+        "--no-class-weights",
+        action="store_true",
+        help="Disable class weighting for loss function"
+    )
+    args = parser.parse_args()
+
+    DATA_DIR = Path(args.data_dir)
+    IMG_DIR = DATA_DIR / "img"
+    TRAIN_CSV = DATA_DIR / "train.csv"
+    VAL_CSV = DATA_DIR / "val.csv"
+    TEST_CSV = DATA_DIR / "test.csv"
+
+    BATCH_SIZE = 32
+    NUM_EPOCHS = 10
+    LEARNING_RATE = 1e-3
+    UNFREEZE_EPOCH = 2
+    UNFREEZE_LR = 1e-5
+    IMAGE_SIZE = 224
+    MODEL_NAME = args.model_name
+
+    # Initialize wandb
+    wandb.init(
+        project="cm3070-mammography",
+        entity="lex",
+        name=args.run_name,
+        config={
+            "task": "5-class-patch-classification",
+            "batch_size": BATCH_SIZE,
+            "num_epochs": NUM_EPOCHS,
+            "learning_rate": LEARNING_RATE,
+            "unfreeze_epoch": UNFREEZE_EPOCH,
+            "unfreeze_lr": UNFREEZE_LR,
+            "image_size": IMAGE_SIZE,
+            "num_classes": NUM_CLASSES,
+            "class_names": CLASS_NAMES,
+            "model": MODEL_NAME,
+            "optimizer": "adam",
+            "dataset": args.data_dir,
+            "frozen_backbone": True,
+            "class_weighting": not args.no_class_weights,
+            "pretrained_weights": args.weights,
+            "run_name": args.run_name
+        }
+    )
+
+    print("Loading datasets...")
+    train_transform = get_train_transform(output_size=IMAGE_SIZE)
+    val_transform = get_val_transform(output_size=IMAGE_SIZE)
+
+    train_dataset = CSVDataset(
+        csv_path=str(TRAIN_CSV),
+        img_dir=str(IMG_DIR),
+        transform=train_transform,
+    )
+    val_dataset = CSVDataset(
+        csv_path=str(VAL_CSV),
+        img_dir=str(IMG_DIR),
+        transform=val_transform,
+    )
+
+    print(f"Training samples: {len(train_dataset)}")
+    print(f"Validation samples: {len(val_dataset)}")
+
+    # Print class distribution
+    train_labels = [label for _, label in train_dataset.samples]
+    label_counts = Counter(train_labels)
+    print("\nTraining class distribution:")
+    for i in range(NUM_CLASSES):
+        count = label_counts.get(i, 0)
+        pct = 100 * count / len(train_labels)
+        print(f"  {CLASS_NAMES[i]}: {count} ({pct:.1f}%)")
+
+    # Compute class weights
+    if not args.no_class_weights:
+        class_weights = compute_class_weights(train_dataset)
+        print("\nClass weights:")
+        for i in range(NUM_CLASSES):
+            print(f"  {CLASS_NAMES[i]}: {class_weights[i].item():.4f}")
+    else:
+        class_weights = None
+        print("\nClass weighting disabled")
+
+    train_loader = DataLoader(
+        dataset=train_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=True,
+        num_workers=4
+    )
+    val_loader = DataLoader(
+        dataset=val_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=4
+    )
+
+    model = create_model(MODEL_NAME, num_classes=NUM_CLASSES)
+    if args.weights:
+        print(f"Loading weights from {args.weights}")
+        model.load_weights(args.weights)
+    freeze_backbone(model)
+
+    optimizer = optim.Adam(learning_rate=LEARNING_RATE)
+
+    trainer = MultiClassTrainer(
+        model=model,
+        optimizer=optimizer,
+        class_weights=class_weights,
+        num_classes=NUM_CLASSES
+    )
+
+    print()
+    print("Starting training...")
+    print(f"Phase 1 (epochs 1-{UNFREEZE_EPOCH}): Training head only with LR={LEARNING_RATE}")
+    print(f"Phase 2 (epochs {UNFREEZE_EPOCH+1}-{NUM_EPOCHS}): Fine-tuning entire model with LR={UNFREEZE_LR}")
+
+    trainer.fit(
+        train_loader=train_loader,
+        val_loader=val_loader,
+        num_epochs=NUM_EPOCHS,
+        checkpoint_dir=Path("checkpoints") / args.run_name,
+        unfreeze_epoch=UNFREEZE_EPOCH,
+        unfreeze_lr=UNFREEZE_LR
+    )
+
+    print()
+    print("Training complete!")
+
+    # Test set evaluation
+    print()
+    print("Running inference on test set...")
+    test_dataset = CSVDataset(
+        csv_path=str(TEST_CSV),
+        img_dir=str(IMG_DIR),
+        transform=val_transform,
+    )
+    print(f"Test samples: {len(test_dataset)}")
+
+    test_loader = DataLoader(
+        dataset=test_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=4
+    )
+
+    best_checkpoint = Path("checkpoints") / args.run_name / "best_model.npz"
+    if best_checkpoint.exists():
+        print(f"Loading best model from {best_checkpoint}")
+        model.load_weights(str(best_checkpoint))
+
+    test_metrics = trainer.validate(test_loader)
+    print()
+    print(f"Test Results:")
+    print(f"  Test Loss: {test_metrics['val_loss']:.4f}")
+    print(f"  Test Accuracy: {test_metrics['val_accuracy']:.4f}")
+    print("  Per-class accuracy:")
+    for class_name, acc in test_metrics['per_class_accuracy'].items():
+        print(f"    {class_name}: {acc:.4f}")
+
+    # Log test metrics
+    test_log = {
+        "test_loss": test_metrics['val_loss'],
+        "test_accuracy": test_metrics['val_accuracy']
+    }
+    for class_name, acc in test_metrics['per_class_accuracy'].items():
+        test_log[f"test_acc_{class_name.replace(' ', '_')}"] = acc
+
+    wandb.log(test_log)
+    wandb.finish()
+
+
+if __name__ == "__main__":
+    main()
