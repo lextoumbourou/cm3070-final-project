@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Dict, Optional
 import argparse
 import csv
+import time
 import mlx.core as mx
 import mlx.nn as nn
 import mlx.optimizers as optim
@@ -156,6 +157,7 @@ class Trainer:
         self.model.train()
         total_loss = 0.0
         total_samples = 0
+        epoch_start = time.time()
 
         for batch_idx, (inputs, targets) in enumerate(train_loader):
             loss = self.train_step(inputs, targets)
@@ -173,8 +175,10 @@ class Trainer:
                     "train_loss_batch": avg_loss
                 })
 
+        epoch_time = time.time() - epoch_start
         avg_loss = total_loss / total_samples
-        return {"loss": avg_loss}
+        throughput = total_samples / epoch_time
+        return {"loss": avg_loss, "epoch_time": epoch_time, "throughput": throughput}
 
     def validate(self, val_loader) -> Dict[str, float]:
         self.model.eval()
@@ -217,6 +221,8 @@ class Trainer:
             checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
         best_val_loss = float('inf')
+        training_start = time.time()
+        epoch_times = []
 
         for epoch in range(num_epochs):
             print(f"\nEpoch {epoch + 1}/{num_epochs}")
@@ -231,20 +237,34 @@ class Trainer:
 
             # Training
             train_metrics = self.train_epoch(train_loader, epoch)
+            epoch_times.append(train_metrics['epoch_time'])
             print(f"Training Loss: {train_metrics['loss']:.4f}")
+            print(f"  Epoch time: {train_metrics['epoch_time']:.1f}s, Throughput: {train_metrics['throughput']:.2f} img/s")
 
             # Validation
             val_metrics = self.validate(val_loader)
             print(f"Validation Loss: {val_metrics['val_loss']:.4f}")
             print(f"Validation Accuracy: {val_metrics['val_accuracy']:.4f}")
 
-            wandb.log({
+            # Get memory usage if available
+            peak_memory_gb = None
+            try:
+                peak_memory_gb = mx.get_peak_memory() / (1024**3)
+            except:
+                pass
+
+            log_dict = {
                 "epoch": epoch + 1,
                 "train_loss": train_metrics['loss'],
                 "val_loss": val_metrics['val_loss'],
                 "val_accuracy": val_metrics['val_accuracy'],
-                "learning_rate": self.optimizer.learning_rate.item() if hasattr(self.optimizer.learning_rate, 'item') else self.optimizer.learning_rate
-            })
+                "learning_rate": self.optimizer.learning_rate.item() if hasattr(self.optimizer.learning_rate, 'item') else self.optimizer.learning_rate,
+                "epoch_time_sec": train_metrics['epoch_time'],
+                "throughput_img_per_sec": train_metrics['throughput'],
+            }
+            if peak_memory_gb is not None:
+                log_dict["peak_memory_gb"] = peak_memory_gb
+            wandb.log(log_dict)
 
             # Save best model
             if checkpoint_dir and val_metrics['val_loss'] < best_val_loss:
@@ -252,6 +272,14 @@ class Trainer:
                 checkpoint_path = checkpoint_dir / "best_model.npz"
                 self.model.save_weights(str(checkpoint_path))
                 print(f"Saved best model to {checkpoint_path}")
+
+        total_training_time = time.time() - training_start
+        return {
+            "total_time_sec": total_training_time,
+            "epoch_times": epoch_times,
+            "avg_epoch_time": sum(epoch_times) / len(epoch_times) if epoch_times else 0,
+            "best_val_loss": best_val_loss
+        }
 
 
 def main():
@@ -375,7 +403,7 @@ def main():
     print(f"Phase 1 (epochs 1-{UNFREEZE_EPOCH}): Training head only with LR={LEARNING_RATE}")
     print(f"Phase 2 (epochs {UNFREEZE_EPOCH+1}-{NUM_EPOCHS}): Fine-tuning entire model with LR={UNFREEZE_LR}")
 
-    trainer.fit(
+    training_stats = trainer.fit(
         train_loader=train_loader,
         val_loader=val_loader,
         num_epochs=NUM_EPOCHS,
@@ -385,6 +413,19 @@ def main():
     )
 
     print("\nTraining complete!")
+    print("\n" + "=" * 50)
+    print("TRAINING COMPUTATIONAL METRICS")
+    print("=" * 50)
+    total_hours = training_stats['total_time_sec'] / 3600
+    print(f"Total training time: {training_stats['total_time_sec']:.1f}s ({total_hours:.2f} hours)")
+    print(f"Average epoch time: {training_stats['avg_epoch_time']:.1f}s")
+    print(f"Best validation loss: {training_stats['best_val_loss']:.4f}")
+    try:
+        peak_mem = mx.get_peak_memory() / (1024**3)
+        print(f"Peak memory usage: {peak_mem:.2f} GB")
+    except:
+        pass
+    print("=" * 50)
 
     print("\nRunning inference on test set...")
     test_dataset = CSVDataset(
@@ -411,10 +452,18 @@ def main():
     print(f"  Test Loss: {test_metrics['val_loss']:.4f}")
     print(f"  Test Accuracy: {test_metrics['val_accuracy']:.4f}")
 
-    wandb.log({
+    final_log = {
         "test_loss": test_metrics['val_loss'],
-        "test_accuracy": test_metrics['val_accuracy']
-    })
+        "test_accuracy": test_metrics['val_accuracy'],
+        "total_training_time_sec": training_stats['total_time_sec'],
+        "total_training_time_hours": training_stats['total_time_sec'] / 3600,
+        "avg_epoch_time_sec": training_stats['avg_epoch_time'],
+    }
+    try:
+        final_log["peak_memory_gb"] = mx.get_peak_memory() / (1024**3)
+    except:
+        pass
+    wandb.log(final_log)
 
     wandb.finish()
 
