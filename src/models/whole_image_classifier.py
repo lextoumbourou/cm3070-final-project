@@ -1,5 +1,12 @@
 """
 Attempt to implement the whole image part of Shen et al 2019.
+
+Converts a patch classifier to a whole image classifier:
+
+1. Load pretrained patch classifier (ResNet50 trained on ROI patches)
+2. Remove classification head, keep convolutional backbone
+3. Add VGG-style top layers for spatial aggregation (one of the approaches in paper)
+4. Train on full mammograms (1152x896) with binary labels
 """
 
 from pathlib import Path
