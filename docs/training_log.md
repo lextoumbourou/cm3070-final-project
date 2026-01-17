@@ -213,3 +213,41 @@ Throughput: 19.43 images/sec
 Peak memory usage: 1.75 GB
 ==================================================
 ```
+
+### Inference with TTA (CBIS-DDSM Shen et al)
+
+```
+uv run python src/inference_whole_image.py     --data-dir datasets/prep/cbis-ddsm-whole     --weights checkpoints/cbis-whole-v1/best_model.safetensors     --tta
+Creating model with backbone: resnet50
+Downloading weights for resnet50 from HuggingFace Hub.
+Loading weights: checkpoints/cbis-whole-v1/best_model.safetensors
+Loading samples from: datasets/prep/cbis-ddsm-whole/test.csv
+Total samples: 641
+  Benign: 379, Malignant: 262
+
+Running inference with TTA (4 variants per image)...
+Processed 641/641 (TTA)
+
+==================================================
+RESULTS (with TTA)
+==================================================
+AUC:         0.7448
+Sensitivity: 0.4771 (TPR, Recall)
+Specificity: 0.8602 (TNR)
+Accuracy:    0.7036
+--------------------------------------------------
+Confusion Matrix (threshold=0.5):
+  TP:  125  FN:  137
+  FP:   53  TN:  326
+==================================================
+
+==================================================
+INFERENCE COMPUTATIONAL METRICS
+==================================================
+Total inference time: 130.15s
+Number of samples: 641
+Average latency per image: 203.0ms
+Throughput: 4.92 images/sec
+Peak memory usage: 2.04 GB
+==================================================
+```

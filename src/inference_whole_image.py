@@ -37,7 +37,23 @@ def preprocess_image(img_path, transform):
     return mx.array(img)
 
 
-def run_inference(model, samples, img_dir, transform, batch_size=2):
+def get_tta_transforms(target_height=896, target_width=1152):
+    """Get 4 TTA transform variants: original, h-flip, v-flip, both flips.
+
+    Following Shen et al. 2019: "horizontally and vertically flipping
+    an image to obtain four images and taking an average of the four
+    images' scores"
+    """
+    base_resize = A.Resize(height=target_height, width=target_width)
+    return [
+        A.Compose([base_resize]),  # Original
+        A.Compose([base_resize, A.HorizontalFlip(p=1.0)]),  # H-flip
+        A.Compose([base_resize, A.VerticalFlip(p=1.0)]),  # V-flip
+        A.Compose([base_resize, A.HorizontalFlip(p=1.0), A.VerticalFlip(p=1.0)]),  # Both
+    ]
+
+
+def run_inference(model, samples, img_dir, transform, batch_size=2, tta=False):
     model.eval()
     all_probs = []
     all_labels = []
@@ -51,30 +67,63 @@ def run_inference(model, samples, img_dir, transform, batch_size=2):
 
     total_start = time.time()
 
-    for i in range(0, len(samples), batch_size):
-        batch_start = time.time()
-        batch_samples = samples[i:i + batch_size]
-        batch_images = []
-        batch_labels = []
-
-        for filename, label in batch_samples:
+    if tta:
+        tta_transforms = get_tta_transforms(
+            target_height=transform.transforms[0].height,
+            target_width=transform.transforms[0].width
+        )
+        for i, (filename, label) in enumerate(samples):
+            batch_start = time.time()
             img_path = img_dir / filename
-            img = preprocess_image(img_path, transform)
-            batch_images.append(img)
-            batch_labels.append(label)
 
-        inputs = mx.stack(batch_images)
-        logits = model(inputs)
-        probs = mx.softmax(logits, axis=1)[:, 1]
-        mx.eval(probs)
+            img = Image.open(img_path).convert('RGB')
+            img_np = np.array(img).astype(np.uint8)
 
-        batch_time = time.time() - batch_start
-        batch_times.append(batch_time)
+            variants = []
+            for tta_transform in tta_transforms:
+                augmented = tta_transform(image=img_np)['image']
+                augmented = augmented.astype(np.float32) / 255.0
+                variants.append(mx.array(augmented))
 
-        all_probs.extend(probs.tolist())
-        all_labels.extend(batch_labels)
+            inputs = mx.stack(variants)
+            logits = model(inputs)
+            probs = mx.softmax(logits, axis=1)[:, 1]
+            mx.eval(probs)
 
-        print(f"Processed {min(i + batch_size, len(samples))}/{len(samples)}", end='\r')
+            avg_prob = mx.mean(probs).item()
+
+            batch_time = time.time() - batch_start
+            batch_times.append(batch_time)
+
+            all_probs.append(avg_prob)
+            all_labels.append(label)
+
+            print(f"Processed {i + 1}/{len(samples)} (TTA)", end='\r')
+    else:
+        for i in range(0, len(samples), batch_size):
+            batch_start = time.time()
+            batch_samples = samples[i:i + batch_size]
+            batch_images = []
+            batch_labels = []
+
+            for filename, label in batch_samples:
+                img_path = img_dir / filename
+                img = preprocess_image(img_path, transform)
+                batch_images.append(img)
+                batch_labels.append(label)
+
+            inputs = mx.stack(batch_images)
+            logits = model(inputs)
+            probs = mx.softmax(logits, axis=1)[:, 1]
+            mx.eval(probs)
+
+            batch_time = time.time() - batch_start
+            batch_times.append(batch_time)
+
+            all_probs.extend(probs.tolist())
+            all_labels.extend(batch_labels)
+
+            print(f"Processed {min(i + batch_size, len(samples))}/{len(samples)}", end='\r')
 
     total_time = time.time() - total_start
     print()
@@ -124,6 +173,8 @@ def main():
     parser.add_argument("--target-width", type=int, default=1152)
     parser.add_argument("--batch-size", type=int, default=2)
     parser.add_argument("--threshold", type=float, default=0.5)
+    parser.add_argument("--tta", action="store_true",
+                        help="Enable test-time augmentation (4 variants: original, h-flip, v-flip, both)")
     args = parser.parse_args()
 
     data_dir = Path(args.data_dir)
@@ -151,15 +202,18 @@ def main():
 
     transform = get_inference_transform(args.target_height, args.target_width)
 
-    print("\nRunning inference...")
+    if args.tta:
+        print("\nRunning inference with TTA (4 variants per image)...")
+    else:
+        print("\nRunning inference...")
     probs, labels, timing_stats = run_inference(
-        model, samples, img_dir, transform, batch_size=args.batch_size
+        model, samples, img_dir, transform, batch_size=args.batch_size, tta=args.tta
     )
 
     metrics = compute_metrics(probs, labels, threshold=args.threshold)
 
     print("\n" + "=" * 50)
-    print("RESULTS")
+    print("RESULTS" + (" (with TTA)" if args.tta else ""))
     print("=" * 50)
     print(f"AUC:         {metrics['auc']:.4f}")
     print(f"Sensitivity: {metrics['sensitivity']:.4f} (TPR, Recall)")
