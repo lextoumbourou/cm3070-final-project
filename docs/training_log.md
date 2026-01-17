@@ -173,5 +173,24 @@ For MALIGNANT samples (n=276):
 ## Whole Image Training using Patch-Backbone
 
 ```
-uv run python src/trainer_whole_image.py       --run-name cbis-whole-v1       --patch-weights checkpoints/cbis-patch-multi/best_model.npz       --backbone resnet50
+uv run python src/trainer_whole_image.py  --run-name cbis-whole-v1 --patch-weights checkpoints/cbis-patch-multi/best_model.npz --backbone resnet50
+```
+
+Inference:
+
+```
+Processed 641/641
+
+==================================================
+RESULTS
+==================================================
+AUC:         0.7342
+Sensitivity: 0.4504 (TPR, Recall)
+Specificity: 0.8443 (TNR)
+Accuracy:    0.6833
+--------------------------------------------------
+Confusion Matrix (threshold=0.5):
+  TP:  118  FN:  144
+  FP:   59  TN:  320
+==================================================
 ```
