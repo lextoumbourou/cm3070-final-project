@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "vendor" / "mlx-image" / "
 from mlxim.model import create_model
 from mlxim.data import DataLoader
 from mlxim.data._base import Dataset
-from src.model_utils import freeze_backbone
+from src.model_utils import freeze_backbone, freeze_backbone_except_top_n
 
 from PIL import Image
 import numpy as np
@@ -261,10 +261,19 @@ class MultiClassTrainer:
         val_loader,
         num_epochs: int,
         checkpoint_dir: Optional[Path] = None,
-        unfreeze_epoch: Optional[int] = None,
-        unfreeze_lr: Optional[float] = None
+        stage2_epoch: Optional[int] = None,
+        stage2_lr: Optional[float] = None,
+        stage2_unfreeze_layers: Optional[int] = None,
+        stage3_epoch: Optional[int] = None,
+        stage3_lr: Optional[float] = None
     ):
-        """Train the model for multiple epochs."""
+        """
+        Train the model with 3-stage progressive unfreezing (following Shen et al.).
+
+        Stage 1: Train head only (frozen backbone)
+        Stage 2: Unfreeze top N layers of backbone
+        Stage 3: Unfreeze all layers
+        """
         if checkpoint_dir:
             checkpoint_dir = Path(checkpoint_dir)
             checkpoint_dir.mkdir(parents=True, exist_ok=True)
@@ -275,11 +284,15 @@ class MultiClassTrainer:
             print(f"\nEpoch {epoch + 1}/{num_epochs}")
             print("-" * 50)
 
-            # Unfreeze and lower learning rate if specified
-            if unfreeze_epoch is not None and epoch == unfreeze_epoch:
-                print(f"\n>>> Unfreezing backbone and setting LR to {unfreeze_lr}")
+            if stage2_epoch is not None and epoch == stage2_epoch:
+                print(f"\n>>> Stage 2: Unfreezing top {stage2_unfreeze_layers} layers, LR={stage2_lr}")
+                freeze_backbone_except_top_n(self.model, n_layers=stage2_unfreeze_layers)
+                self.optimizer = optim.Adam(learning_rate=stage2_lr)
+
+            if stage3_epoch is not None and epoch == stage3_epoch:
+                print(f"\n>>> Stage 3: Unfreezing all layers, LR={stage3_lr}")
                 self.model.unfreeze()
-                self.optimizer = optim.Adam(learning_rate=unfreeze_lr)
+                self.optimizer = optim.Adam(learning_rate=stage3_lr)
 
             # Training
             train_metrics = self.train_epoch(train_loader, epoch)
@@ -293,7 +306,6 @@ class MultiClassTrainer:
             for class_name, acc in val_metrics['per_class_accuracy'].items():
                 print(f"  {class_name}: {acc:.4f}")
 
-            # Log to wandb
             log_dict = {
                 "epoch": epoch + 1,
                 "train_loss": train_metrics['loss'],
@@ -306,7 +318,6 @@ class MultiClassTrainer:
 
             wandb.log(log_dict)
 
-            # Save best model
             if checkpoint_dir and val_metrics['val_loss'] < best_val_loss:
                 best_val_loss = val_metrics['val_loss']
                 checkpoint_path = checkpoint_dir / "best_model.npz"
@@ -356,11 +367,15 @@ def main():
     VAL_CSV = DATA_DIR / "val.csv"
     TEST_CSV = DATA_DIR / "test.csv"
 
+    # Shen et al. 2019 training schedule for S10 patch dataset
     BATCH_SIZE = 32
-    NUM_EPOCHS = 10
-    LEARNING_RATE = 1e-3
-    UNFREEZE_EPOCH = 2
-    UNFREEZE_LR = 1e-5
+    NUM_EPOCHS = 50
+    STAGE1_LR = 1e-3
+    STAGE1_EPOCHS = 3
+    STAGE2_LR = 1e-4
+    STAGE2_EPOCHS = 10
+    STAGE2_UNFREEZE_LAYERS = 46  # Top 46 layers for ResNet50
+    STAGE3_LR = 1e-5
     IMAGE_SIZE = 224
     MODEL_NAME = args.model_name
 
@@ -373,16 +388,18 @@ def main():
             "task": "5-class-patch-classification",
             "batch_size": BATCH_SIZE,
             "num_epochs": NUM_EPOCHS,
-            "learning_rate": LEARNING_RATE,
-            "unfreeze_epoch": UNFREEZE_EPOCH,
-            "unfreeze_lr": UNFREEZE_LR,
+            "stage1_lr": STAGE1_LR,
+            "stage1_epochs": STAGE1_EPOCHS,
+            "stage2_lr": STAGE2_LR,
+            "stage2_epochs": STAGE2_EPOCHS,
+            "stage2_unfreeze_layers": STAGE2_UNFREEZE_LAYERS,
+            "stage3_lr": STAGE3_LR,
             "image_size": IMAGE_SIZE,
             "num_classes": NUM_CLASSES,
             "class_names": CLASS_NAMES,
             "model": MODEL_NAME,
             "optimizer": "adam",
             "dataset": args.data_dir,
-            "frozen_backbone": True,
             "class_weighting": not args.no_class_weights,
             "pretrained_weights": args.weights,
             "run_name": args.run_name
@@ -445,7 +462,7 @@ def main():
         model.load_weights(args.weights)
     freeze_backbone(model)
 
-    optimizer = optim.Adam(learning_rate=LEARNING_RATE)
+    optimizer = optim.Adam(learning_rate=STAGE1_LR)
 
     trainer = MultiClassTrainer(
         model=model,
@@ -454,18 +471,25 @@ def main():
         num_classes=NUM_CLASSES
     )
 
+    stage2_start = STAGE1_EPOCHS
+    stage3_start = STAGE1_EPOCHS + STAGE2_EPOCHS
+
     print()
-    print("Starting training...")
-    print(f"Phase 1 (epochs 1-{UNFREEZE_EPOCH}): Training head only with LR={LEARNING_RATE}")
-    print(f"Phase 2 (epochs {UNFREEZE_EPOCH+1}-{NUM_EPOCHS}): Fine-tuning entire model with LR={UNFREEZE_LR}")
+    print("Starting 3-stage training (Shen et al. 2019)...")
+    print(f"Stage 1 (epochs 1-{STAGE1_EPOCHS}): Head only, LR={STAGE1_LR}")
+    print(f"Stage 2 (epochs {stage2_start+1}-{stage3_start}): Top {STAGE2_UNFREEZE_LAYERS} layers, LR={STAGE2_LR}")
+    print(f"Stage 3 (epochs {stage3_start+1}-{NUM_EPOCHS}): All layers, LR={STAGE3_LR}")
 
     trainer.fit(
         train_loader=train_loader,
         val_loader=val_loader,
         num_epochs=NUM_EPOCHS,
         checkpoint_dir=Path("checkpoints") / args.run_name,
-        unfreeze_epoch=UNFREEZE_EPOCH,
-        unfreeze_lr=UNFREEZE_LR
+        stage2_epoch=stage2_start,
+        stage2_lr=STAGE2_LR,
+        stage2_unfreeze_layers=STAGE2_UNFREEZE_LAYERS,
+        stage3_epoch=stage3_start,
+        stage3_lr=STAGE3_LR
     )
 
     print()

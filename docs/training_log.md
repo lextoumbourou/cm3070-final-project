@@ -251,3 +251,70 @@ Throughput: 4.92 images/sec
 Peak memory usage: 2.04 GB
 ==================================================
 ```
+
+### Training 50 Epochs (using Shen's method)
+
+```
+uv run python src/trainer_multiclass.py \
+    --model-name resnet50 \
+    --run-name cbis-patches-shen-schedule \
+    --data-dir datasets/prep/cbis-ddsm-patches
+Test Results:
+  Test Accuracy: 0.6820
+  Per-class accuracy:
+    Background: 0.8488
+    Benign mass: 0.5468
+    Malignant mass: 0.5497
+    Benign calc: 0.4537
+    Malignant calc: 0.5550
+```
+
+Seems to be worse than the simpler patch training.
+
+Inference
+
+```
+uv run python src/inference_multiclass.py  --data-dir datasets/prep/cbis-ddsm-roi --weights checkpoints/cbis-patches-shen-schedule/best_model.npz --model-name resnet50
+Loading model: resnet50 (5-class)
+Downloading weights for resnet50 from HuggingFace Hub.
+Loading weights: checkpoints/cbis-patches-shen-schedule/best_model.npz
+Loading samples from: datasets/prep/cbis-ddsm-roi/test.csv
+Total samples: 704
+  Benign: 428, Malignant: 276
+
+Running inference...
+Processed 704/704
+
+============================================================
+BINARY METRICS (Aggregated from 5-class predictions)
+============================================================
+P(malignant) = P(malignant_mass) + P(malignant_calc)
+------------------------------------------------------------
+AUC:         0.6945
+Sensitivity: 0.7500 (TPR, Recall)
+Specificity: 0.5117 (TNR)
+Accuracy:    0.6051
+------------------------------------------------------------
+Confusion Matrix (threshold=0.5):
+  TP:  207  FN:   69
+  FP:  209  TN:  219
+
+============================================================
+5-CLASS PREDICTION DISTRIBUTION
+============================================================
+
+For BENIGN samples (n=428):
+  Background          :   36 (  8.4%)
+  Benign mass         :   88 ( 20.6%)
+  Malignant mass      :   93 ( 21.7%)
+  Benign calc         :   86 ( 20.1%)
+  Malignant calc      :  125 ( 29.2%)
+
+For MALIGNANT samples (n=276):
+  Background          :   17 (  6.2%)
+  Benign mass         :   23 (  8.3%)
+  Malignant mass      :  107 ( 38.8%)
+  Benign calc         :   25 (  9.1%)
+  Malignant calc      :  104 ( 37.7%)
+============================================================
+```
