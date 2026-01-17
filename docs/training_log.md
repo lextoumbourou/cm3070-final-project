@@ -179,6 +179,15 @@ uv run python src/trainer_whole_image.py  --run-name cbis-whole-v1 --patch-weigh
 Inference:
 
 ```
+uv run src/inference_whole_image.py --data-dir datasets/prep/cbis-ddsm-whole --weights checkpoints/cbis-whole-v1/best_model.safetensors
+Creating model with backbone: resnet50
+Downloading weights for resnet50 from HuggingFace Hub.
+Loading weights: checkpoints/cbis-whole-v1/best_model.safetensors
+Loading samples from: datasets/prep/cbis-ddsm-whole/test.csv
+Total samples: 641
+  Benign: 379, Malignant: 262
+
+Running inference...
 Processed 641/641
 
 ==================================================
@@ -192,5 +201,15 @@ Accuracy:    0.6833
 Confusion Matrix (threshold=0.5):
   TP:  118  FN:  144
   FP:   59  TN:  320
+==================================================
+
+==================================================
+INFERENCE COMPUTATIONAL METRICS
+==================================================
+Total inference time: 32.99s
+Number of samples: 641
+Average latency per image: 51.5ms
+Throughput: 19.43 images/sec
+Peak memory usage: 1.75 GB
 ==================================================
 ```
