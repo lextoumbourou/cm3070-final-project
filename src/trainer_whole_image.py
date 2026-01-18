@@ -165,7 +165,7 @@ class WholeImageTrainer:
         }
 
     def fit(self, train_loader, val_loader, num_epochs, checkpoint_dir=None,
-            stage2_epoch=None, stage2_lr=None, stage2_weight_decay=None):
+            stage2_epoch=None, stage2_lr=None):
         if checkpoint_dir:
             checkpoint_dir = Path(checkpoint_dir)
             checkpoint_dir.mkdir(parents=True, exist_ok=True)
@@ -179,9 +179,9 @@ class WholeImageTrainer:
             print("-" * 50)
 
             if stage2_epoch is not None and epoch == stage2_epoch:
-                print(f"\n>>> Stage 2: Unfreezing backbone, LR={stage2_lr}, weight_decay={stage2_weight_decay}")
+                print(f"\n>>> Stage 2: Unfreezing backbone, LR = {stage2_lr}")
                 self.model.unfreeze_all()
-                self.optimizer = optim.AdamW(learning_rate=stage2_lr, weight_decay=stage2_weight_decay or 0.0)
+                self.optimizer = optim.Adam(learning_rate=stage2_lr)
 
             train_metrics = self.train_epoch(train_loader, epoch)
             epoch_times.append(train_metrics['epoch_time'])
@@ -241,9 +241,7 @@ def main():
     parser.add_argument("--epochs", type=int, default=50)
     parser.add_argument("--stage1-epochs", type=int, default=30)
     parser.add_argument("--stage1-lr", type=float, default=1e-4)
-    parser.add_argument("--stage1-weight-decay", type=float, default=0.001)
     parser.add_argument("--stage2-lr", type=float, default=1e-5)
-    parser.add_argument("--stage2-weight-decay", type=float, default=0.01)
     parser.add_argument("--target-height", type=int, default=896)
     parser.add_argument("--target-width", type=int, default=1152)
     args = parser.parse_args()
@@ -263,9 +261,7 @@ def main():
             "epochs": args.epochs,
             "stage1_epochs": args.stage1_epochs,
             "stage1_lr": args.stage1_lr,
-            "stage1_weight_decay": args.stage1_weight_decay,
             "stage2_lr": args.stage2_lr,
-            "stage2_weight_decay": args.stage2_weight_decay,
             "target_height": args.target_height,
             "target_width": args.target_width,
             "backbone": args.backbone,
@@ -307,11 +303,11 @@ def main():
     print("\nStage 1: Training top layers only (backbone frozen)")
     model.freeze_backbone()
 
-    optimizer = optim.AdamW(learning_rate=args.stage1_lr, weight_decay=args.stage1_weight_decay)
+    optimizer = optim.Adam(learning_rate=args.stage1_lr)
     trainer = WholeImageTrainer(model, optimizer, NUM_CLASSES)
 
-    print(f"Stage 1: Epochs 1-{args.stage1_epochs}, LR={args.stage1_lr}, weight_decay={args.stage1_weight_decay}")
-    print(f"Stage 2: Epochs {args.stage1_epochs+1}-{args.epochs}, LR={args.stage2_lr}, weight_decay={args.stage2_weight_decay}")
+    print(f"Stage 1: Epochs 1-{args.stage1_epochs}, LR={args.stage1_lr}")
+    print(f"Stage 2: Epochs {args.stage1_epochs+1}-{args.epochs}, LR={args.stage2_lr}")
 
     training_stats = trainer.fit(
         train_loader=train_loader,
@@ -319,8 +315,7 @@ def main():
         num_epochs=args.epochs,
         checkpoint_dir=Path("checkpoints") / args.run_name,
         stage2_epoch=args.stage1_epochs,
-        stage2_lr=args.stage2_lr,
-        stage2_weight_decay=args.stage2_weight_decay
+        stage2_lr=args.stage2_lr
     )
 
     print("\nTraining complete!")
