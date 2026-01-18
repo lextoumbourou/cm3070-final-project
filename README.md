@@ -26,7 +26,23 @@ uv run jupyter lab
 
 ### 01-cbis-ddsm
 
-EDA notebook for the CBIS-DDSM data.
+EDA notebook for the CBIS-DDSM dataset.
+
+### 02-inbreast
+
+EDA notebook for the INBreast dataset.
+
+### 03-preprocess
+
+Preprocessing pipeline demonstrations.
+
+### 04-patches
+
+Patch extraction experiments.
+
+### 05-vindr
+
+EDA notebook for the VinDr Mammogram dataset.
 
 ## Data Processing
 
