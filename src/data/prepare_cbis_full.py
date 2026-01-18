@@ -24,6 +24,7 @@ from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 
 from src.data.cbis_ddsm import DCMData, parse_dcm_path, resolve_dcm_path, load_dicom_array
+from src.data.preprocessing import get_breast_bbox, normalise_to_uint8
 
 
 logging.basicConfig(
@@ -111,60 +112,18 @@ def get_filepath_from_dcm_data(dcm_data: DCMData, metadata_df: pd.DataFrame) -> 
     return resolve_dcm_path(dcm_data, metadata_df, RAW_DATA_ROOT)
 
 
-def apply_morphological_transforms(thresh_frame, iterations: int = 2):
-    kernel = np.ones((100, 100), np.uint8)
-    opened_mask = cv2.morphologyEx(thresh_frame, cv2.MORPH_OPEN, kernel)
-    closed_mask = cv2.morphologyEx(opened_mask, cv2.MORPH_CLOSE, kernel, iterations=iterations)
-    return closed_mask
-
-
-def get_contours_from_mask(mask):
-    cnts, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    cnt = max(cnts, key=cv2.contourArea)
-    x, y, w, h = cv2.boundingRect(cnt)
-    return (x, y, w, h)
-
-
-def crop_coords(img: np.ndarray):
-    """Get bounding box coordinates for breast region using thresholding."""
-    # Normalize to uint8 for OpenCV operations
-    if img.dtype != np.uint8:
-        # Normalize to 0-255 range
-        img_normalized = ((img - img.min()) / (img.max() - img.min()) * 255).astype(np.uint8)
-    else:
-        img_normalized = img
-
-    blur = cv2.GaussianBlur(img_normalized, (5, 5), 0)
-    _, breast_mask = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    morph_img = apply_morphological_transforms(breast_mask)
-    return get_contours_from_mask(morph_img)
-
-
 def preprocess_mammogram(img: np.ndarray, target_size=TARGET_SIZE):
     """Preprocess mammogram image: crop and resize to grayscale."""
-    x, y, w, h = crop_coords(img)
+    x, y, w, h = get_breast_bbox(img)
     img_cropped = img[y:y+h, x:x+w]
-
-    # Normalize to 0-255 range for saving as PNG
-    if img_cropped.dtype != np.uint8:
-        img_normalized = ((img_cropped - img_cropped.min()) / (img_cropped.max() - img_cropped.min()) * 255).astype(np.uint8)
-    else:
-        img_normalized = img_cropped
-
-    img_final = cv2.resize(img_normalized, (target_size, target_size))
-    return img_final
+    img_normalized = normalise_to_uint8(img_cropped)
+    return cv2.resize(img_normalized, (target_size, target_size))
 
 
 def preprocess_roi(img: np.ndarray, target_size=TARGET_SIZE):
     """Preprocess ROI image: normalize and resize (no cropping needed)."""
-    # Normalize to 0-255 range for saving as PNG
-    if img.dtype != np.uint8:
-        img_normalized = ((img - img.min()) / (img.max() - img.min()) * 255).astype(np.uint8)
-    else:
-        img_normalized = img
-
-    img_final = cv2.resize(img_normalized, (target_size, target_size))
-    return img_final
+    img_normalized = normalise_to_uint8(img)
+    return cv2.resize(img_normalized, (target_size, target_size))
 
 
 def process_case(

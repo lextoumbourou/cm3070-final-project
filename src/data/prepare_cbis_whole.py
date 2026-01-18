@@ -22,6 +22,7 @@ from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 
 from src.data.cbis_ddsm import DCMData, parse_dcm_path, resolve_dcm_path, load_dicom_array
+from src.data.preprocessing import get_breast_bbox, normalise_to_uint8
 
 
 logging.basicConfig(
@@ -145,32 +146,19 @@ def get_abnormality_summary(group_df: pd.DataFrame) -> Dict:
     }
 
 
-def normalise_image(img: np.ndarray) -> np.ndarray:
-    """Normalise image to 0-255 uint8 range."""
-    if img.dtype != np.uint8:
-        img_min, img_max = img.min(), img.max()
-        if img_max > img_min:
-            img_normalized = ((img - img_min) / (img_max - img_min) * 255).astype(np.uint8)
-        else:
-            img_normalized = np.zeros_like(img, dtype=np.uint8)
-    else:
-        img_normalized = img
-    return img_normalized
-
-
 def preprocess_mammogram(
     img: np.ndarray,
     target_width: int = TARGET_WIDTH,
-    target_height: int = TARGET_HEIGHT
+    target_height: int = TARGET_HEIGHT,
+    crop_breast: bool = False
 ) -> np.ndarray:
-    """
-    Preprocess full mammogram: normalise and resize.
+    """Preprocess full mammogram: optionally crop to breast region, normalise and resize."""
+    if crop_breast:
+        x, y, w, h = get_breast_bbox(img)
+        img = img[y:y+h, x:x+w]
 
-    Todo: experiment with cropping out background.
-    """
-    img_normalized = normalise_image(img)
-    img_resized = cv2.resize(img_normalized, (target_width, target_height))
-    return img_resized
+    img_normalized = normalise_to_uint8(img)
+    return cv2.resize(img_normalized, (target_width, target_height))
 
 
 def load_full_image(row: pd.Series, metadata_df: pd.DataFrame) -> Optional[np.ndarray]:
@@ -199,20 +187,19 @@ def process_image(
     image_idx: int,
     target_width: int = TARGET_WIDTH,
     target_height: int = TARGET_HEIGHT,
+    crop_breast: bool = False,
 ) -> Optional[dict]:
     """
     Process a single mammogram image.
     """
     patient_id, breast_side, image_view = image_key
 
-    # Load full mammogram (use first row - all rows have same image path)
     first_row = group_df.iloc[0]
     img = load_full_image(first_row, metadata_df)
     if img is None:
         return None
 
-    # Preprocess
-    img_processed = preprocess_mammogram(img, target_width, target_height)
+    img_processed = preprocess_mammogram(img, target_width, target_height, crop_breast)
 
     # Determine label (malignant if ANY abnormality is malignant)
     label = get_image_label(group_df)
@@ -252,6 +239,7 @@ def process_and_save_split(
     output_root: Path,
     target_width: int = TARGET_WIDTH,
     target_height: int = TARGET_HEIGHT,
+    crop_breast: bool = False,
     start_idx: int = 0
 ) -> Tuple[pd.DataFrame, int]:
     """
@@ -259,7 +247,6 @@ def process_and_save_split(
     """
     logger.info(f"Processing {split_name} split...")
 
-    # Group abnormalities by unique image
     grouped = group_by_image(split_df)
     logger.info(f"{split_name}: {len(grouped)} unique images from {len(split_df)} abnormalities")
 
@@ -271,7 +258,8 @@ def process_and_save_split(
     ):
         metadata = process_image(
             image_key, group_df, metadata_df, img_output_dir, current_idx,
-            target_width=target_width, target_height=target_height
+            target_width=target_width, target_height=target_height,
+            crop_breast=crop_breast
         )
 
         if metadata is not None:
@@ -324,15 +312,33 @@ def main():
         default=TARGET_HEIGHT,
         help=f"Target image height in pixels (default: {TARGET_HEIGHT})",
     )
+    parser.add_argument(
+        "--crop",
+        action="store_true",
+        help="Crop to breast region using Otsu thresholding before resizing",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default=None,
+        help="Output directory (default: datasets/prep/cbis-ddsm-whole or cbis-ddsm-whole-crop)",
+    )
 
     args = parser.parse_args()
 
+    if args.output_dir:
+        output_root = Path(args.output_dir)
+    else:
+        output_root = Path("datasets/prep/cbis-ddsm-whole-crop") if args.crop else OUTPUT_ROOT
+    img_output_dir = output_root / "img"
+
     logger.info("Starting CBIS-DDSM whole mammogram dataset preparation...")
     logger.info(f"Target size: {args.target_width}x{args.target_height}")
-    logger.info(f"Output directory: {OUTPUT_ROOT}")
+    logger.info(f"Crop breast region: {args.crop}")
+    logger.info(f"Output directory: {output_root}")
 
-    OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
-    IMG_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    output_root.mkdir(parents=True, exist_ok=True)
+    img_output_dir.mkdir(parents=True, exist_ok=True)
 
     train_all_df, test_df, metadata_df = load_and_combine_data()
 
@@ -341,23 +347,22 @@ def main():
         train_all_df, val_ratio=args.val_ratio, random_state=args.random_seed
     )
 
-    # Process each split
     train_metadata, next_idx = process_and_save_split(
-        train_df, "train", metadata_df, IMG_OUTPUT_DIR, OUTPUT_ROOT,
+        train_df, "train", metadata_df, img_output_dir, output_root,
         target_width=args.target_width, target_height=args.target_height,
-        start_idx=0
+        crop_breast=args.crop, start_idx=0
     )
 
     val_metadata, next_idx = process_and_save_split(
-        val_df, "val", metadata_df, IMG_OUTPUT_DIR, OUTPUT_ROOT,
+        val_df, "val", metadata_df, img_output_dir, output_root,
         target_width=args.target_width, target_height=args.target_height,
-        start_idx=next_idx
+        crop_breast=args.crop, start_idx=next_idx
     )
 
     test_metadata, _ = process_and_save_split(
-        test_df, "test", metadata_df, IMG_OUTPUT_DIR, OUTPUT_ROOT,
+        test_df, "test", metadata_df, img_output_dir, output_root,
         target_width=args.target_width, target_height=args.target_height,
-        start_idx=next_idx
+        crop_breast=args.crop, start_idx=next_idx
     )
 
     logger.info("Dataset preparation complete!")
