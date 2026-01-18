@@ -318,3 +318,71 @@ For MALIGNANT samples (n=276):
   Malignant calc      :  104 ( 37.7%)
 ============================================================
 ```
+
+### Trainer Whole Image
+
+```
+uv run python src/trainer_whole_image.py \
+      --run-name cbis-whole-shen-wd \
+      --patch-weights checkpoints/cbis-patches-shen-schedule/best_model.npz \
+      --backbone resnet50
+
+==================================================
+TRAINING COMPUTATIONAL METRICS
+==================================================
+Total training time: 29340.3s (8.15 hours)
+Average epoch time: 571.7s
+Best validation AUC: 0.7895
+Peak memory usage: 9.50 GB
+==================================================
+
+Evaluating on test set...
+Test samples: 641
+Loading best model from checkpoints/cbis-whole-shen-wd/best_model.safetensors
+
+Test Results:
+  Loss: 0.7108
+  Accuracy: 0.6958
+  AUC: 0.7264
+```
+
+### Inference Whole Image TTA
+
+```bash
+uv run python src/inference_whole_image.py \
+>       --data-dir datasets/prep/cbis-ddsm-whole \
+>       --weights checkpoints/cbis-whole-shen-wd/best_model.safetensors \
+>       --tta
+Creating model with backbone: resnet50
+Downloading weights for resnet50 from HuggingFace Hub.
+Loading weights: checkpoints/cbis-whole-shen-wd/best_model.safetensors
+Loading samples from: datasets/prep/cbis-ddsm-whole/test.csv
+Total samples: 641
+  Benign: 379, Malignant: 262
+
+Running inference with TTA (4 variants per image)...
+Processed 641/641 (TTA)
+
+==================================================
+RESULTS (with TTA)
+==================================================
+AUC:         0.7390
+Sensitivity: 0.3969 (TPR, Recall)
+Specificity: 0.8918 (TNR)
+Accuracy:    0.6895
+--------------------------------------------------
+Confusion Matrix (threshold=0.5):
+  TP:  104  FN:  158
+  FP:   41  TN:  338
+==================================================
+
+==================================================
+INFERENCE COMPUTATIONAL METRICS
+==================================================
+Total inference time: 149.77s
+Number of samples: 641
+Average latency per image: 233.6ms
+Throughput: 4.28 images/sec
+Peak memory usage: 2.04 GB
+==================================================
+```
