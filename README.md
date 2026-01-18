@@ -63,3 +63,11 @@ Fine-tune EfficientNet-B0 on the CBIS-DDSM dataset:
 ```bash
 uv run train
 ```
+
+## Testing
+
+Run unit tests:
+
+```bash
+uv run python -m pytest tests/
+```
