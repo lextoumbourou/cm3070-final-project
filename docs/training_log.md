@@ -386,3 +386,108 @@ Throughput: 4.28 images/sec
 Peak memory usage: 2.04 GB
 ==================================================
 ```
+
+---
+
+Training using the crop method (no weight decay)
+
+```
+Training complete!
+
+==================================================
+TRAINING COMPUTATIONAL METRICS
+==================================================
+Total training time: 26102.2s (7.25 hours)
+Average epoch time: 508.7s
+Best validation AUC: 0.7626
+Peak memory usage: 9.50 GB
+==================================================
+
+Evaluating on test set...
+Test samples: 641
+Loading best model from checkpoints/cbis-whole-crop-v2-no-wc/best_model.safetensors
+
+Test Results:
+  Loss: 0.7668
+  Accuracy: 0.6225
+  AUC: 0.7225
+```
+
+---
+
+Training using best patch weights with weight decay
+
+```
+uv run python src/trainer_whole_image.py \
+      --run-name cbis-whole-wd-only \
+      --data-dir datasets/prep/cbis-ddsm-whole \
+      --patch-weights checkpoints/cbis-patch-multi/best_model.npz \
+      --backbone resnet50 \
+      --stage1-weight-decay 0.001 \
+      --stage2-weight-decay 0.01
+```
+
+Results:
+
+Training complete!
+
+```
+==================================================
+TRAINING COMPUTATIONAL METRICS
+==================================================
+Total training time: 28362.8s (7.88 hours)
+Average epoch time: 552.7s
+Best validation AUC: 0.8354
+Peak memory usage: 9.50 GB
+==================================================
+
+Evaluating on test set...
+Test samples: 641
+Loading best model from checkpoints/cbis-whole-wd-only/best_model.safetensors
+
+Test Results:
+  Loss: 0.6878
+  Accuracy: 0.6552
+  AUC: 0.7351
+```
+
+TTA
+
+```
+uv run python src/inference_whole_image.py \
+>       --data-dir datasets/prep/cbis-ddsm-whole \
+>       --weights checkpoints/cbis-whole-wd-only/best_model.safetensors \
+>       --tta
+Creating model with backbone: resnet50
+Downloading weights for resnet50 from HuggingFace Hub.
+Loading weights: checkpoints/cbis-whole-wd-only/best_model.safetensors
+Loading samples from: datasets/prep/cbis-ddsm-whole/test.csv
+Total samples: 641
+  Benign: 379, Malignant: 262
+
+Running inference with TTA (4 variants per image)...
+Processed 641/641 (TTA)
+
+==================================================
+RESULTS (with TTA)
+==================================================
+AUC:         0.7453
+Sensitivity: 0.7519 (TPR, Recall)
+Specificity: 0.6095 (TNR)
+Accuracy:    0.6677
+--------------------------------------------------
+Confusion Matrix (threshold=0.5):
+  TP:  197  FN:   65
+  FP:  148  TN:  231
+==================================================
+
+==================================================
+INFERENCE COMPUTATIONAL METRICS
+==================================================
+Total inference time: 153.82s
+Number of samples: 641
+Average latency per image: 240.0ms
+Throughput: 4.17 images/sec
+Peak memory usage: 2.04 GB
+==================================================
+```
