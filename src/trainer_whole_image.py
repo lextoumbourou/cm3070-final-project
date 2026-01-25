@@ -246,12 +246,14 @@ def main():
     parser.add_argument("--stage2-weight-decay", type=float, default=0.01)
     parser.add_argument("--target-height", type=int, default=896)
     parser.add_argument("--target-width", type=int, default=1152)
+    parser.add_argument("--train-csv", type=str, default="train.csv")
+    parser.add_argument("--val-csv", type=str, default="val.csv")
     args = parser.parse_args()
 
     DATA_DIR = Path(args.data_dir)
     IMG_DIR = DATA_DIR / "img"
-    TRAIN_CSV = DATA_DIR / "train.csv"
-    VAL_CSV = DATA_DIR / "val.csv"
+    TRAIN_CSV = DATA_DIR / args.train_csv
+    VAL_CSV = DATA_DIR / args.val_csv
 
     wandb.init(
         project="cm3070-mammography",
