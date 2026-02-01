@@ -1,4 +1,4 @@
-"""Basic Streamlit web interface for fine-tuning."""
+"""Streamlit web interface for mammogram classification and fine-tuning."""
 
 from pathlib import Path
 import sys
@@ -14,6 +14,7 @@ import mlx.nn as nn
 import mlx.optimizers as optim
 import albumentations as A
 import cv2
+from sklearn.metrics import roc_auc_score
 
 # Ensure mlx-image is in path.
 sys.path.insert(0, str(Path(__file__).parent.parent / "vendor" / "mlx-image" / "src"))
@@ -115,6 +116,70 @@ def validate_training_folder(folder_path):
         "benign_files": benign_images,
         "malignant_files": malignant_images
     }, None
+
+
+def stratified_train_val_split(benign_files, malignant_files, val_fraction=0.2):
+    """Split files into train/val sets, maintaining class balance."""
+    np.random.shuffle(benign_files)
+    np.random.shuffle(malignant_files)
+
+    n_benign_val = max(1, int(len(benign_files) * val_fraction))
+    n_malignant_val = max(1, int(len(malignant_files) * val_fraction))
+
+    val_benign = benign_files[:n_benign_val]
+    train_benign = benign_files[n_benign_val:]
+
+    val_malignant = malignant_files[:n_malignant_val]
+    train_malignant = malignant_files[n_malignant_val:]
+
+    return train_benign, train_malignant, val_benign, val_malignant
+
+
+def evaluate_model(model, dataset):
+    """Evaluate model on a dataset, returning AUC, sensitivity, specificity."""
+    model.eval()
+    loader = DataLoader(dataset, batch_size=2, shuffle=False, num_workers=0)
+
+    all_probs = []
+    all_labels = []
+
+    for inputs, targets in loader:
+        logits = model(inputs)
+        probs = mx.softmax(logits, axis=1)
+        mx.eval(probs)
+
+        all_probs.extend(probs[:, 1].tolist())
+        all_labels.extend(targets.tolist())
+
+    all_probs = np.array(all_probs)
+    all_labels = np.array(all_labels)
+
+    # AUC
+    if len(np.unique(all_labels)) < 2:
+        auc = 0.5  # Can't compute AUC with single class
+    else:
+        auc = roc_auc_score(all_labels, all_probs)
+
+    # Sensitivity and specificity at threshold 0.5
+    preds = (all_probs >= 0.5).astype(int)
+    tp = np.sum((preds == 1) & (all_labels == 1))
+    tn = np.sum((preds == 0) & (all_labels == 0))
+    fp = np.sum((preds == 1) & (all_labels == 0))
+    fn = np.sum((preds == 0) & (all_labels == 1))
+
+    sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+    accuracy = (tp + tn) / len(all_labels) if len(all_labels) > 0 else 0.0
+
+    return {
+        "auc": auc,
+        "sensitivity": sensitivity,
+        "specificity": specificity,
+        "accuracy": accuracy,
+        "n_samples": len(all_labels),
+        "n_malignant": int(np.sum(all_labels)),
+        "n_benign": int(np.sum(all_labels == 0)),
+    }
 
 
 class FolderDataset(Dataset):
@@ -318,14 +383,20 @@ def finetune_tab():
                 with st.spinner("Initializing..."):
                     model = load_model(base_weights)
 
-                    all_files = stats["benign_files"] + stats["malignant_files"]
-                    np.random.shuffle(all_files)
-
-                    benign_files = [f for f in all_files if f.parent.name == "benign"]
-                    malignant_files = [f for f in all_files if f.parent.name == "malignant"]
+                    # Stratified train/val split (80/20)
+                    benign_files = list(stats["benign_files"])
+                    malignant_files = list(stats["malignant_files"])
+                    train_benign, train_malignant, val_benign, val_malignant = \
+                        stratified_train_val_split(benign_files, malignant_files, val_fraction=0.2)
 
                     train_transform = get_train_transform()
-                    dataset = FolderDataset(benign_files, malignant_files, train_transform)
+                    val_transform = get_transform()
+                    train_dataset = FolderDataset(train_benign, train_malignant, train_transform)
+                    val_dataset = FolderDataset(val_benign, val_malignant, val_transform)
+
+                    n_train = len(train_dataset)
+                    n_val = len(val_dataset)
+                    status_text.markdown(f"Training on {n_train} images, validating on {n_val} images")
 
                 preset_config = TRAINING_PRESETS[preset]
                 start_time = time.time()
@@ -349,22 +420,96 @@ def finetune_tab():
                         cols[3].metric("Remaining", remaining_str)
 
                 model = run_finetuning(
-                    model, dataset,
+                    model, train_dataset,
                     epochs=preset_config["epochs"],
                     stage1_epochs=preset_config["stage1_epochs"],
                     progress_callback=update_progress
                 )
 
+                # Save model
                 output_dir = Path("checkpoints") / output_name
                 output_dir.mkdir(parents=True, exist_ok=True)
                 output_path = output_dir / "best_model.safetensors"
                 model.save_weights(str(output_path))
 
                 elapsed = time.time() - start_time
-                st.success(f"Fine-tuning complete in {int(elapsed // 60)}m {int(elapsed % 60)}s")
-                st.info(f"Model saved to: `{output_path}`")
 
-                if st.button("Use this model for inference"):
+                # Evaluate on validation set
+                status_text.markdown("**Evaluating on validation set...**")
+                val_metrics = evaluate_model(model, val_dataset)
+
+                # Clear progress display
+                progress_bar.empty()
+                metrics_container.empty()
+                status_text.empty()
+
+                # Display results
+                st.divider()
+                st.subheader("Fine-tuning Results")
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Training Time", f"{int(elapsed // 60)}m {int(elapsed % 60)}s")
+                    st.metric("Model Saved To", str(output_path))
+
+                with col2:
+                    st.metric("Validation AUC", f"{val_metrics['auc']:.3f}")
+                    st.metric("Sensitivity", f"{val_metrics['sensitivity']:.1%}")
+                    st.metric("Specificity", f"{val_metrics['specificity']:.1%}")
+
+                st.caption(f"Validated on {val_metrics['n_samples']} images "
+                          f"({val_metrics['n_malignant']} malignant, {val_metrics['n_benign']} benign)")
+
+                # Result interpretation and guidance
+                st.divider()
+                auc = val_metrics['auc']
+
+                if auc >= 0.80:
+                    st.success("**Good results.** The fine-tuned model shows strong performance on your data.")
+                    st.markdown("""
+                    The model is ready for use. You can now:
+                    - Switch to this model in the Settings tab
+                    - Use it for inference on new images
+                    """)
+                elif auc >= 0.70:
+                    st.info("**Reasonable results.** The model shows moderate performance.")
+                    st.markdown("""
+                    **Suggestions to improve:**
+                    - Add more training images (especially for the minority class)
+                    - Try the **Thorough** preset for longer training
+                    - Ensure consistent image quality across your dataset
+                    """)
+                elif auc >= 0.60:
+                    st.warning("**Suboptimal results.** Performance is below typical clinical thresholds.")
+                    st.markdown(f"""
+                    **Possible causes:**
+                    - Too few training images (current: {stats['total']}, recommended: 50+)
+                    - Class imbalance (benign: {stats['benign']}, malignant: {stats['malignant']})
+                    - Inconsistent image quality or labelling errors
+
+                    **Recommendations:**
+                    - Add more labelled images, especially {'malignant' if stats['malignant'] < stats['benign'] else 'benign'} cases
+                    - Try the **Thorough** preset
+                    - Review your labels for accuracy
+                    """)
+                else:
+                    st.error("**Poor results.** The model is performing near random chance.")
+                    st.markdown(f"""
+                    **This may indicate:**
+                    - Insufficient training data (current: {stats['total']} images)
+                    - Severe class imbalance
+                    - Data quality issues or labelling errors
+                    - The base model may not be suitable for your imaging equipment
+
+                    **Recommendations:**
+                    - Significantly increase your dataset size (aim for 100+ images)
+                    - Balance your classes (similar numbers of benign and malignant)
+                    - Verify all labels are correct
+                    - Try training with the **Thorough** preset
+                    """)
+
+                st.divider()
+                if st.button("Use this model for inference", type="primary"):
                     st.session_state.current_weights = str(output_path)
                     st.session_state.pop("model", None)
                     st.rerun()
