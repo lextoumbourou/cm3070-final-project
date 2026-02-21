@@ -1,20 +1,63 @@
-# CM3070 - Final Project
+# Offline Breast Cancer Detection and Training on Apple Silicon Hardware
 
-## Prototype
+## CM3070 - Final Project
 
-1. Firstly, going to download 2 datasets:
-* CBIS-DDSM
-* InBreast
-2. Then, try to train models using a simple script.
-3. Then, perform inference and report on metrics.
+This is the repository for my final project for my BSc in Computer Science at University of London.
+
+The aim of this project is demonstrate that we can build effective Breast Cancer Mammography classification models on Apple Silicon hardware, to support offline fine-tuning on hospital specific datasets.
+
+The project comprises of two major parts:
+
+1. **Web-based Interface** - A web-based interface to support easy and accessible fine-tuning.
+2. **Model Training Scripts** - A series of scripts for training models and baselining different approachs to support our claims.
+
+## Project Requirements
+
+We utilise `uv` throughout the project, as it provides one of the best tools for managing Python dependenices.
+
+Uv can be installed following [these]() instructions.
+
+Then, the project dependencies can be installed with the sync command, as follows:
+
+```bash
+uv sync
+```
+
+## Web-based Interface
+
+To run the web-based interface, it can be run as follows:
+
+```bash
+streamlit run src/app.py
+```
+
+The web-interface is comprised of 3 sections, separated by tabs:
+
+1. The **Inference** tab, which provides users with the ability to classify Mammography images into benign or malignant.
+2. The **Fine-Tune** tab, which can be used to fine-tune on clinical data.
+3. The **Settings** tab, where users can choose which base model is active, and see basic information about the model including input size and threshold for considering an scan as malignant. 
+
+## Model Training Scripts 
+
+The model training is broken down into a few different categories:
+
+- Downloading datasets.
+- Dataset EDA via Juypter notebooks.
+- Training and inference scripts.
 
 ## Download datasets
 
-### Download CBIS-DDSM JPEG
+I utilised 3 separate Mammography datasets to demonstrate base model training, and then to highlight the problem of domain shift, and show how fine-tuning can recover performance. The datasets are:
 
-```
-kaggle datasets download awsaf49/cbis-ddsm-breast-cancer-image-dataset --path datasets/cbis-ddsm-breast-cancer-image-dataset --unzip
-```
+* CBIS-DDSM.
+* InBreast.
+* VinDr-Mammo.
+
+### Download CBIS-DDSM
+
+I choose to use the official CBIS-DDSM dataset.
+
+See `01-cbis-ddsm` for details of how it was downloaded and preprocessed.
 
 ### Download INBreast
 
