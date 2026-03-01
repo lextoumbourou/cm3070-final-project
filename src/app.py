@@ -32,6 +32,45 @@ TRAINING_PRESETS = {
     "Thorough": {"epochs": 30, "stage1_epochs": 10},
 }
 
+# Model descriptions for UI display
+MODEL_DESCRIPTIONS = {
+    "cbis-whole-wd-only": {
+        "name": "CBIS-DDSM Base Model (Default)",
+        "description": "Trained on CBIS-DDSM dataset. Use this as a starting point for fine-tuning.",
+        "is_default": True,
+        "vendor": True,
+    },
+    "cbis-whole-final": {
+        "name": "CBIS-DDSM Final",
+        "description": "Trained on CBIS-DDSM train+val set. Slightly higher AUC but used test-set selection.",
+        "is_default": False,
+        "vendor": True,
+    },
+    "inbreast-whole-finetune": {
+        "name": "INbreast Fine-tuned",
+        "description": "Fine-tuned on INbreast dataset (Portuguese FFDM).",
+        "is_default": False,
+        "vendor": True,
+    },
+    "vindr-whole-finetune": {
+        "name": "VinDr Fine-tuned",
+        "description": "Fine-tuned on VinDr-Mammo dataset (Vietnamese hospitals).",
+        "is_default": False,
+        "vendor": True,
+    },
+}
+
+
+def get_model_display_info(weights_path):
+    """Get display name and description for a model."""
+    model_name = Path(weights_path).parent.name
+    if model_name in MODEL_DESCRIPTIONS:
+        info = MODEL_DESCRIPTIONS[model_name]
+        return info["name"], info["description"], info.get("vendor", False)
+    else:
+        # User-trained model
+        return model_name, "User fine-tuned model", False
+
 
 def load_model(weights_path):
     model = create_whole_image_classifier(
