@@ -468,7 +468,7 @@ def finetune_tab():
                     st.success("**Good results.** The fine-tuned model shows strong performance on your data.")
                     st.markdown("""
                     The model is ready for use. You can now:
-                    - Switch to this model in the Settings tab
+                    - Switch to this model in the Project Overview tab
                     - Use it for inference on new images
                     """)
                 elif auc >= 0.70:
@@ -515,8 +515,8 @@ def finetune_tab():
                     st.rerun()
 
 
-def settings_tab():
-    st.header("Settings")
+def project_overview_tab():
+    st.header("Project Overview")
 
     current_weights = st.session_state.get("current_weights", DEFAULT_WEIGHTS)
 
@@ -579,16 +579,16 @@ def main():
     if "current_weights" not in st.session_state:
         st.session_state.current_weights = DEFAULT_WEIGHTS
 
-    tab1, tab2, tab3 = st.tabs(["Inference", "Fine-tune", "Settings"])
+    tab1, tab2, tab3 = st.tabs(["Project Overview", "Inference", "Fine-tune"])
 
     with tab1:
-        inference_tab()
+        project_overview_tab()
 
     with tab2:
-        finetune_tab()
+        inference_tab()
 
     with tab3:
-        settings_tab()
+        finetune_tab()
 
 
 if __name__ == "__main__":
