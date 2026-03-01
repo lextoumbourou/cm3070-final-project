@@ -1,4 +1,4 @@
-# Offline Breast Cancer Detection and Training on Apple Silicon Hardware
+# On-Device Fine-Tuning for Privacy-Preserving Mammography Classification
 
 ## CM3070 - Final Project
 
