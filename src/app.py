@@ -556,54 +556,125 @@ def finetune_tab():
 
 def project_overview_tab():
     st.header("Project Overview")
+    st.markdown("""
+    Configure your model and datasets here before running inference or fine-tuning.
+    """)
 
     current_weights = st.session_state.get("current_weights", DEFAULT_WEIGHTS)
 
-    st.subheader("Model Selection")
+    # Model Selection.
+    st.subheader("1. Select Model")
 
     checkpoints_dir = Path("checkpoints")
     available_models = []
+    model_options = []
+
     if checkpoints_dir.exists():
-        for model_dir in checkpoints_dir.iterdir():
+        for model_dir in sorted(checkpoints_dir.iterdir()):
             if model_dir.is_dir():
                 weights_file = model_dir / "best_model.safetensors"
                 if weights_file.exists():
-                    available_models.append(str(weights_file))
+                    weights_path = str(weights_file)
+                    available_models.append(weights_path)
+                    display_name, description, is_vendor = get_model_display_info(weights_path)
+                    prefix = "📦 " if is_vendor else "👤 "
+                    model_options.append(f"{prefix}{display_name}")
 
     if available_models:
-        selected = st.selectbox(
+        # Find current selection index
+        current_index = 0
+        if current_weights in available_models:
+            current_index = available_models.index(current_weights)
+
+        selected_index = st.selectbox(
             "Select model",
-            options=available_models,
-            index=available_models.index(current_weights) if current_weights in available_models else 0
+            options=range(len(model_options)),
+            format_func=lambda i: model_options[i],
+            index=current_index,
+            help="📦 = Vendor-provided model, 👤 = User fine-tuned model"
         )
 
-        if selected != current_weights:
-            if st.button("Load selected model"):
-                st.session_state.current_weights = selected
+        selected_path = available_models[selected_index]
+        display_name, description, _ = get_model_display_info(selected_path)
+
+        st.caption(f"*{description}*")
+
+        if selected_path != current_weights:
+            if st.button("Load selected model", type="primary"):
+                st.session_state.current_weights = selected_path
                 st.session_state.pop("model", None)
-                st.success(f"Switched to: {selected}")
+                st.success(f"Switched to: {display_name}")
                 st.rerun()
     else:
         st.warning("No models found in checkpoints/")
 
     st.divider()
 
-    st.subheader("Manual weights path")
-    manual_path = st.text_input("Weights file path", value=current_weights)
-    if manual_path != current_weights and Path(manual_path).exists():
-        if st.button("Load manual weights"):
-            st.session_state.current_weights = manual_path
-            st.session_state.pop("model", None)
-            st.rerun()
+    # Dataset Selection.
+    st.subheader("2. Configure Datasets (Optional)")
+    st.markdown("""
+    Set your training and test data folders here. These will be used for batch inference and fine-tuning.
+
+    **Required folder structure:**
+    ```
+    your_folder/
+    ├── benign/
+    │   ├── image1.png
+    │   └── ...
+    └── malignant/
+        ├── image1.png
+        └── ...
+    ```
+    """)
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        train_folder = st.text_input(
+            "Training data folder",
+            value=st.session_state.get("train_folder", ""),
+            placeholder="/path/to/train_data",
+            help="Folder with benign/ and malignant/ subfolders for fine-tuning"
+        )
+        if train_folder:
+            stats, error = validate_training_folder(train_folder)
+            if error:
+                st.error(error)
+            else:
+                st.success(f"✓ {stats['total']} images ({stats['benign']} benign, {stats['malignant']} malignant)")
+                st.session_state.train_folder = train_folder
+                st.session_state.train_stats = stats
+
+    with col2:
+        test_folder = st.text_input(
+            "Test data folder",
+            value=st.session_state.get("test_folder", ""),
+            placeholder="/path/to/test_data",
+            help="Folder with benign/ and malignant/ subfolders for evaluation"
+        )
+        if test_folder:
+            stats, error = validate_training_folder(test_folder)
+            if error:
+                st.error(error)
+            else:
+                st.success(f"✓ {stats['total']} images ({stats['benign']} benign, {stats['malignant']} malignant)")
+                st.session_state.test_folder = test_folder
+                st.session_state.test_stats = stats
 
     st.divider()
 
+    # Current Configuration Summary.
     st.subheader("Current Configuration")
-    st.code(f"""
-Active model: {current_weights}
-Image size: {TARGET_WIDTH} x {TARGET_HEIGHT}
-Threshold: 0.5
-    """)
+    config_col1, config_col2 = st.columns(2)
+
+    with config_col1:
+        st.markdown("**Model**")
+        display_name, _, _ = get_model_display_info(current_weights)
+        st.code(display_name)
+
+    with config_col2:
+        st.markdown("**Settings**")
+        st.code(f"Image size: {TARGET_WIDTH} x {TARGET_HEIGHT}\nThreshold: 0.5")
 
 
 def main():
