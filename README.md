@@ -33,9 +33,9 @@ streamlit run src/app.py
 
 The web-interface is comprised of 3 sections, separated by tabs:
 
-1. The **Inference** tab, which provides users with the ability to classify Mammography images into benign or malignant.
-2. The **Fine-Tune** tab, which can be used to fine-tune on clinical data.
-3. The **Settings** tab, where users can choose which base model is active, and see basic information about the model including input size and threshold for considering an scan as malignant. 
+1. The **Project Overview** tab, where users select the model and configure training/test data folders.
+2. The **Inference** tab, which provides users with the ability to classify Mammography images into benign or malignant, including batch evaluation on test datasets.
+3. The **Fine-Tune** tab, which can be used to fine-tune on clinical data.
 
 ## Model Training Scripts 
 
