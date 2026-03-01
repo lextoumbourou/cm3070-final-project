@@ -303,7 +303,6 @@ def run_finetuning(model, dataset, epochs, stage1_epochs, progress_callback):
 
 def inference_tab():
     st.header("Inference")
-    st.markdown("Upload a mammogram image to get a malignancy prediction.")
 
     weights_path = st.session_state.get("current_weights", DEFAULT_WEIGHTS)
 
@@ -318,6 +317,79 @@ def inference_tab():
 
     model = st.session_state.model
     transform = get_transform()
+    display_name, _, _ = get_model_display_info(weights_path)
+
+    st.caption(f"Using model: **{display_name}**")
+
+    # Batch Inference on Test Dataset.
+    test_folder = st.session_state.get("test_folder", "")
+    test_stats = st.session_state.get("test_stats", None)
+
+    if test_folder and test_stats:
+        st.subheader("Batch Inference on Test Dataset")
+
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.markdown(f"Test folder: `{test_folder}` ({test_stats['total']} images)")
+        with col2:
+            run_batch = st.button("Run Evaluation", type="primary", use_container_width=True)
+
+        if run_batch:
+            with st.spinner("Running inference on test dataset..."):
+                test_dataset = FolderDataset(
+                    test_stats["benign_files"],
+                    test_stats["malignant_files"],
+                    transform
+                )
+                metrics = evaluate_model(model, test_dataset)
+
+            # Store results for comparison
+            if "batch_results" not in st.session_state:
+                st.session_state.batch_results = {}
+            st.session_state.batch_results[weights_path] = {
+                "metrics": metrics,
+                "model_name": display_name,
+            }
+
+            st.success("Evaluation complete!")
+
+        # Display results if available
+        if "batch_results" in st.session_state and weights_path in st.session_state.batch_results:
+            result = st.session_state.batch_results[weights_path]
+            metrics = result["metrics"]
+
+            metric_cols = st.columns(4)
+            metric_cols[0].metric("AUC", f"{metrics['auc']:.3f}")
+            metric_cols[1].metric("Sensitivity", f"{metrics['sensitivity']:.1%}")
+            metric_cols[2].metric("Specificity", f"{metrics['specificity']:.1%}")
+            metric_cols[3].metric("Accuracy", f"{metrics['accuracy']:.1%}")
+
+            st.caption(f"Evaluated on {metrics['n_samples']} images "
+                      f"({metrics['n_malignant']} malignant, {metrics['n_benign']} benign)")
+
+            # Show comparison if multiple models have been evaluated
+            if len(st.session_state.batch_results) > 1:
+                st.divider()
+                st.markdown("**Model Comparison**")
+                comparison_data = []
+                for path, res in st.session_state.batch_results.items():
+                    m = res["metrics"]
+                    comparison_data.append({
+                        "Model": res["model_name"],
+                        "AUC": f"{m['auc']:.3f}",
+                        "Sensitivity": f"{m['sensitivity']:.1%}",
+                        "Specificity": f"{m['specificity']:.1%}",
+                    })
+                st.table(comparison_data)
+
+        st.divider()
+    else:
+        st.info("💡 Set a test folder in **Project Overview** to enable batch evaluation.")
+        st.divider()
+
+    # Single Image Inference.
+    st.subheader("Single Image Inference")
+    st.markdown("Upload a mammogram image to get a malignancy prediction.")
 
     uploaded_file = st.file_uploader(
         "Upload mammogram",
