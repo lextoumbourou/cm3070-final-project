@@ -107,6 +107,19 @@ Fine-tune EfficientNet-B0 on the CBIS-DDSM dataset:
 uv run train
 ```
 
+## Scripts
+
+### Create Datasets for Testing UI
+
+Create small VinDr datasets for UI testing:
+
+```bash
+uv run python scripts/create_dataset.py --preset tiny
+uv run python scripts/create_dataset.py --preset small
+```
+
+Output: `datasets/prep/vindr-ui-tiny/` or `datasets/prep/vindr-ui-small/`
+
 ## Testing
 
 Run unit tests:
