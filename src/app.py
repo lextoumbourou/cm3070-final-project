@@ -26,6 +26,10 @@ DEFAULT_WEIGHTS = "checkpoints/cbis-whole-wd-only/best_model.safetensors"
 TARGET_HEIGHT = 896
 TARGET_WIDTH = 1152
 
+# Emoji prefixes for model selection UI
+VENDOR_MODEL_PREFIX = "📦 "
+USER_MODEL_PREFIX = "👤 "
+
 TRAINING_PRESETS = {
     "Quick": {"epochs": 5, "stage1_epochs": 2},
     "Standard": {"epochs": 15, "stage1_epochs": 5},
@@ -633,15 +637,25 @@ def project_overview_tab():
     model_options = []
 
     if checkpoints_dir.exists():
-        for model_dir in sorted(checkpoints_dir.iterdir()):
+        # Collect all models with their metadata
+        all_models = []
+        for model_dir in checkpoints_dir.iterdir():
             if model_dir.is_dir():
                 weights_file = model_dir / "best_model.safetensors"
                 if weights_file.exists():
                     weights_path = str(weights_file)
-                    available_models.append(weights_path)
                     display_name, description, is_vendor = get_model_display_info(weights_path)
-                    prefix = "📦 " if is_vendor else "👤 "
-                    model_options.append(f"{prefix}{display_name}")
+                    model_name = model_dir.name
+                    is_default = MODEL_DESCRIPTIONS.get(model_name, {}).get("is_default", False)
+                    all_models.append((weights_path, display_name, description, is_vendor, is_default))
+
+        # Sort default model first, then other vendor models, then user models (alphabetically within groups)
+        all_models.sort(key=lambda x: (not x[4], not x[3], x[1].lower()))
+
+        for weights_path, display_name, description, is_vendor, is_default in all_models:
+            available_models.append(weights_path)
+            prefix = VENDOR_MODEL_PREFIX if is_vendor else USER_MODEL_PREFIX
+            model_options.append(f"{prefix}{display_name}")
 
     if available_models:
         # Find current selection index
@@ -654,7 +668,7 @@ def project_overview_tab():
             options=range(len(model_options)),
             format_func=lambda i: model_options[i],
             index=current_index,
-            help="📦 = Vendor-provided model, 👤 = User fine-tuned model"
+            help=f"{VENDOR_MODEL_PREFIX}= Vendor-provided model, {USER_MODEL_PREFIX}= User fine-tuned model"
         )
 
         selected_path = available_models[selected_index]
