@@ -13,9 +13,34 @@ The project comprises of two major parts:
 
 ## Project Requirements
 
+### Git LFS
+
+This repository uses [Git LFS](https://git-lfs.github.com/) to store large files like model weights.
+
+Install Git LFS before cloning:
+
+```bash
+# macOS
+brew install git-lfs
+
+# Ubuntu/Debian
+sudo apt install git-lfs
+
+# Then initialise
+git lfs install
+```
+
+If you've already cloned without LFS, pull the actual files with:
+
+```bash
+git lfs pull
+```
+
+### Python Dependencies
+
 We utilise `uv` throughout the project, as it provides one of the best tools for managing Python dependenices.
 
-Uv can be installed following [these]() instructions.
+Uv can be installed following [these](https://docs.astral.sh/uv/getting-started/installation/) instructions.
 
 Then, the project dependencies can be installed with the sync command, as follows:
 
