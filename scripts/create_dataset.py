@@ -13,7 +13,9 @@ PRESETS = {
     # 5 per class = 20 total
     "tiny": 5,
     # 100 per class = 400 total
-    "small": 100
+    "small": 100,
+    # 500 per class (~1000 train, ~400 test, capped by available malignant)
+    "large": 500,
 }
 
 
@@ -21,7 +23,7 @@ def main():
     parser = argparse.ArgumentParser(description="Create small VinDr dataset for UI testing")
     parser.add_argument(
             "--preset", choices=PRESETS.keys(), default="tiny",
-            help="Dataset size: tiny (20 images) or small (400 images)")
+            help="Dataset size: tiny (20 images), small (400 images), or large (~2000 images)")
     args = parser.parse_args()
 
     n_per_class = PRESETS[args.preset]
