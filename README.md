@@ -162,3 +162,5 @@ uv run pytest tests/test_accessibility.py -v --no-cov
 ```
 
 This spins up the Streamlit app and checks each tab for WCAG violations using axe-core.
+
+Note: there are currently many violations that come from Streamlit's component library. See [issue](https://github.com/streamlit/streamlit/issues/8399).
