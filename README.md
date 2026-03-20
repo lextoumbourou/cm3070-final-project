@@ -152,3 +152,13 @@ Run unit tests:
 ```bash
 uv run python -m pytest tests/
 ```
+
+### Accessibility Testing
+
+Run the accessibility audit (requires the app's model weights):
+
+```bash
+uv run pytest tests/test_accessibility.py -v --no-cov
+```
+
+This spins up the Streamlit app and checks each tab for WCAG violations using axe-core.
