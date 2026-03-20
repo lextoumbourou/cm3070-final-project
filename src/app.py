@@ -22,7 +22,7 @@ from mlxim.data import DataLoader
 from mlxim.data._base import Dataset
 from src.models.whole_image_classifier import create_whole_image_classifier
 
-DEFAULT_WEIGHTS = "checkpoints/cbis-whole-wd-only/best_model.safetensors"
+DEFAULT_WEIGHTS = "checkpoints/default/cbis-whole-wd-only/best_model.safetensors"
 TARGET_HEIGHT = 896
 TARGET_WIDTH = 1152
 
@@ -533,7 +533,7 @@ def finetune_tab():
         )
 
         # Save model
-        output_dir = Path("checkpoints") / output_name
+        output_dir = Path("checkpoints/user") / output_name
         output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / "best_model.safetensors"
         model.save_weights(str(output_path))
@@ -639,15 +639,19 @@ def project_overview_tab():
     if checkpoints_dir.exists():
         # Collect all models with their metadata
         all_models = []
-        for model_dir in checkpoints_dir.iterdir():
-            if model_dir.is_dir():
-                weights_file = model_dir / "best_model.safetensors"
-                if weights_file.exists():
-                    weights_path = str(weights_file)
-                    display_name, description, is_vendor = get_model_display_info(weights_path)
-                    model_name = model_dir.name
-                    is_default = MODEL_DESCRIPTIONS.get(model_name, {}).get("is_default", False)
-                    all_models.append((weights_path, display_name, description, is_vendor, is_default))
+        for subdir in ["default", "user"]:
+            subdir_path = checkpoints_dir / subdir
+            if not subdir_path.exists():
+                continue
+            for model_dir in subdir_path.iterdir():
+                if model_dir.is_dir():
+                    weights_file = model_dir / "best_model.safetensors"
+                    if weights_file.exists():
+                        weights_path = str(weights_file)
+                        display_name, description, is_vendor = get_model_display_info(weights_path)
+                        model_name = model_dir.name
+                        is_default = MODEL_DESCRIPTIONS.get(model_name, {}).get("is_default", False)
+                        all_models.append((weights_path, display_name, description, is_vendor, is_default))
 
         # Sort default model first, then other vendor models, then user models (alphabetically within groups)
         all_models.sort(key=lambda x: (not x[4], not x[3], x[1].lower()))
@@ -683,7 +687,7 @@ def project_overview_tab():
                 st.success(f"Switched to: {display_name}")
                 st.rerun()
     else:
-        st.warning("No models found in checkpoints/")
+        st.warning("No checkpoints found")
 
     st.divider()
 
