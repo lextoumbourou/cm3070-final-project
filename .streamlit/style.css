@@ -1,0 +1,13 @@
+/*
+ * Custom styles to fix some Streamlit accessibility issues.
+ * See: https://github.com/streamlit/streamlit/issues/8399
+ */
+
+/* Override default caption colour (#83858c, contrast 3.68:1) with
+   #595959 (~5.9:1 on white) to meet WCAG AA 4.5:1 minimum for normal text.
+   See: https://www.w3.org/WAI/WCAG21/Understanding/contrast-minimum.html
+ */
+
+[data-testid='stCaptionContainer'] p {
+    color: #595959 !important;
+}

@@ -765,6 +765,11 @@ def main():
         layout="centered"
     )
 
+    # Load custom CSS for accessibility fixes
+    css_file = Path(__file__).parent.parent / ".streamlit" / "style.css"
+    if css_file.exists():
+        st.markdown(f"<style>{css_file.read_text()}</style>", unsafe_allow_html=True)
+
     st.title("🩺 Mammogram Classifier")
 
     if "current_weights" not in st.session_state:
