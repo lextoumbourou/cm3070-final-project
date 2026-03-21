@@ -180,3 +180,12 @@ uv run ruff check --fix .
 # Format code
 uv run ruff format .
 ```
+
+## Type Checking
+
+This project uses [pyright](https://microsoft.github.io/pyright/) for static type checking.
+
+```bash
+# Run type checker
+uv run pyright src/
+```

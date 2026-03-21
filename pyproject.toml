@@ -47,6 +47,7 @@ dev = [
     "playwright>=1.58.0",
     "axe-playwright-python>=0.1.7",
     "ruff>=0.15.7",
+    "pyright>=1.1.408",
 ]
 
 [tool.pytest.ini_options]
@@ -75,3 +76,11 @@ ignore = []
 
 [tool.ruff.lint.isort]
 known-first-party = ["src"]
+
+[tool.pyright]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
+include = ["src"]
+exclude = ["notebooks", "**/__pycache__"]
+venvPath = "."
+venv = ".venv"
