@@ -62,7 +62,9 @@ The web-interface is comprised of 3 sections, separated by tabs:
 2. The **Inference** tab, which provides users with the ability to classify Mammography images into benign or malignant, including batch evaluation on test datasets.
 3. The **Fine-Tune** tab, which can be used to fine-tune on clinical data.
 
-## Model Training Scripts 
+## Model Training Scripts
+
+See [docs/training_log.md](docs/training_log.md) for a complete record of experiments with metrics and W&B links.
 
 The model training is broken down into a few different categories:
 

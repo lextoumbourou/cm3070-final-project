@@ -1,493 +1,215 @@
-## Prototype
+# Training Log
 
-Train base model on CBIS-DDSM.
+## Summary
 
-```
-uv run src/trainer.py --model-name resnet50 --run-name cbis-baseline --data-dir datasets/prep/cbis-ddsm
-```
+| Run | Dataset | Test AUC | Test Acc | Val AUC | Training Time | W&B |
+|-----|---------|----------|----------|---------|---------------|-----|
+| **cbis-whole-wd-only** | CBIS-DDSM | 0.735 | 0.655 | 0.835 | 7.88h | [link](https://wandb.ai/lex/cm3070-mammography/runs/i4qjands) |
+| cbis-whole-final | CBIS-DDSM (train+val) | 0.737 | 0.674 | 0.714 | - | [link](https://wandb.ai/lex/cm3070-mammography/runs/hslysoda) |
+| inbreast-whole-finetune | INbreast | 0.926 | 0.885 | 0.808 | - | [link](https://wandb.ai/lex/cm3070-mammography/runs/r4u682dq) |
+| vindr-balanced-finetune | VinDr | 0.807 | 0.735 | 0.805 | - | [link](https://wandb.ai/lex/cm3070-mammography/runs/vp94ji8v) |
 
-Test the CBIS-DDSM.
+**Bold** = default model shipped with app.
 
-```
-uv run src/inference.py --model-name resnet50 --weights checkpoints/cbis-baseline/best_model.npz --data-dir datasets/prep/cbis-ddsm
-==================================================
-RESULTS
-==================================================
-AUC:         0.6866
-Sensitivity: 0.4783 (TPR, Recall)
-Specificity: 0.7547 (TNR)
-Accuracy:    0.6463
---------------------------------------------------
-Confusion Matrix (threshold=0.5):
-  TP:  132  FN:  144
-  FP:  105  TN:  323
-==================================================
-```
+---
 
-Test InBreast test set.
+## Base Model Training (CBIS-DDSM)
 
-```
-uv run src/inference.py --model-name resnet50 --weights checkpoints/cbis-baseline/best_model.npz --img-dir datasets/prep/inbreast
-==================================================
-RESULTS
-==================================================
-AUC:         0.6435
-Sensitivity: 0.2000 (TPR, Recall)
-Specificity: 0.9783 (TNR)
-Accuracy:    0.7869
---------------------------------------------------
-Confusion Matrix (threshold=0.5):
-  TP:    3  FN:   12
-  FP:    1  TN:   45
-==================================================
-```
+### cbis-whole-wd-only (Default Model)
 
-Train InBreast train set.
+**Objective:** Train whole-image classifier with weight decay regularization.
 
-```
-uv run src/trainer.py --model-name resnet50 --weights checkpoints/cbis-baseline/best_model.npz --data-dir datasets/prep/inbreast --run-name inbreast-finetune
-```
-
-Retest InBreast test set.
-
-```
-uv run src/inference.py --model-name resnet50 --weights checkpoints/inbreast-finetune/best_model.npz --data-dir datasets/prep/inbreast
-==================================================
-RESULTS
-==================================================
-AUC:         0.9275
-Sensitivity: 0.5333 (TPR, Recall)
-Specificity: 0.9783 (TNR)
-Accuracy:    0.8689
---------------------------------------------------
-Confusion Matrix (threshold=0.5):
-  TP:    8  FN:    7
-  FP:    1  TN:   45
-==================================================
-```
-
-Compare with InBreast from pure model.
-
-```
-uv run src/trainer.py --model-name resnet50 --data-dir datasets/prep/inbreast --run-name inbreast-train
-```
-
-```
-uv run src/inference.py --model-name resnet50 --weights checkpoints/inbreast-train/best_model.npz --data-dir datasets/prep/inbreast
-==================================================
-RESULTS
-==================================================
-AUC:         0.9101
-Sensitivity: 0.4000 (TPR, Recall)
-Specificity: 1.0000 (TNR)
-Accuracy:    0.8525
---------------------------------------------------
-Confusion Matrix (threshold=0.5):
-  TP:    6  FN:    9
-  FP:    0  TN:   46
-==================================================
-```
-
-## ROI
-
-```
-uv run train --model-name resnet50 --run-name cbis-roi-exp1 --data-dir datasets/prep/cbis-ddsm-roi
-uv run src/inference.py --model-name resnet50 --weights checkpoints/cbis-roi-exp1/best_model.npz --data-dir datasets/prep/cbis-ddsm-roi
-==================================================
-RESULTS
-==================================================
-AUC:         0.7363
-Sensitivity: 0.5254 (TPR, Recall)
-Specificity: 0.7921 (TNR)
-Accuracy:    0.6875
---------------------------------------------------
-Confusion Matrix (threshold=0.5):
-  TP:  145  FN:  131
-  FP:   89  TN:  339
-==================================================
-```
-
-## Patches Training
-
-```
-uv run src/trainer_multiclass.py --model-name resnet50 --run-name cbis-patch-multi --data-dir datasets/prep/cbis-ddsm-patches
-Test Results:
-  Test Loss: 0.7592
-  Test Accuracy: 0.7197
-  Per-class accuracy:
-    Background: 0.8835
-    Benign mass: 0.6195
-    Malignant mass: 0.5265
-    Benign calc: 0.5315
-    Malignant calc: 0.5605
-```
-
-### Patch Training on ROI
-
-```
-uv run python src/inference_multiclass.py  --data-dir datasets/prep/cbis-ddsm-roi       --weights checkpoints/cbis-patch-multi/best_model.npz       --model-name resnet50
-Loading model: resnet50 (5-class)
-Downloading weights for resnet50 from HuggingFace Hub.
-Loading weights: checkpoints/cbis-patch-multi/best_model.npz
-Loading samples from: datasets/prep/cbis-ddsm-roi/test.csv
-Total samples: 704
-  Benign: 428, Malignant: 276
-
-Running inference...
-Processed 704/704
-
-============================================================
-BINARY METRICS (Aggregated from 5-class predictions)
-============================================================
-P(malignant) = P(malignant_mass) + P(malignant_calc)
-------------------------------------------------------------
-AUC:         0.7463
-Sensitivity: 0.6739 (TPR, Recall)
-Specificity: 0.6706 (TNR)
-Accuracy:    0.6719
-------------------------------------------------------------
-Confusion Matrix (threshold=0.5):
-  TP:  186  FN:   90
-  FP:  141  TN:  287
-
-============================================================
-5-CLASS PREDICTION DISTRIBUTION
-============================================================
-
-For BENIGN samples (n=428):
-  Background          :   30 (  7.0%)
-  Benign mass         :  141 ( 32.9%)
-  Malignant mass      :   62 ( 14.5%)
-  Benign calc         :  107 ( 25.0%)
-  Malignant calc      :   88 ( 20.6%)
-
-For MALIGNANT samples (n=276):
-  Background          :   22 (  8.0%)
-  Benign mass         :   36 ( 13.0%)
-  Malignant mass      :  102 ( 37.0%)
-  Benign calc         :   27 (  9.8%)
-  Malignant calc      :   89 ( 32.2%)
-============================================================
-```
-
-## Whole Image Training using Patch-Backbone
-
-```
-uv run python src/trainer_whole_image.py  --run-name cbis-whole-v1 --patch-weights checkpoints/cbis-patch-multi/best_model.npz --backbone resnet50
-```
-
-Inference:
-
-```
-uv run src/inference_whole_image.py --data-dir datasets/prep/cbis-ddsm-whole --weights checkpoints/cbis-whole-v1/best_model.safetensors
-Creating model with backbone: resnet50
-Downloading weights for resnet50 from HuggingFace Hub.
-Loading weights: checkpoints/cbis-whole-v1/best_model.safetensors
-Loading samples from: datasets/prep/cbis-ddsm-whole/test.csv
-Total samples: 641
-  Benign: 379, Malignant: 262
-
-Running inference...
-Processed 641/641
-
-==================================================
-RESULTS
-==================================================
-AUC:         0.7342
-Sensitivity: 0.4504 (TPR, Recall)
-Specificity: 0.8443 (TNR)
-Accuracy:    0.6833
---------------------------------------------------
-Confusion Matrix (threshold=0.5):
-  TP:  118  FN:  144
-  FP:   59  TN:  320
-==================================================
-
-==================================================
-INFERENCE COMPUTATIONAL METRICS
-==================================================
-Total inference time: 32.99s
-Number of samples: 641
-Average latency per image: 51.5ms
-Throughput: 19.43 images/sec
-Peak memory usage: 1.75 GB
-==================================================
-```
-
-### Inference with TTA (CBIS-DDSM Shen et al)
-
-```
-uv run python src/inference_whole_image.py     --data-dir datasets/prep/cbis-ddsm-whole     --weights checkpoints/cbis-whole-v1/best_model.safetensors     --tta
-Creating model with backbone: resnet50
-Downloading weights for resnet50 from HuggingFace Hub.
-Loading weights: checkpoints/cbis-whole-v1/best_model.safetensors
-Loading samples from: datasets/prep/cbis-ddsm-whole/test.csv
-Total samples: 641
-  Benign: 379, Malignant: 262
-
-Running inference with TTA (4 variants per image)...
-Processed 641/641 (TTA)
-
-==================================================
-RESULTS (with TTA)
-==================================================
-AUC:         0.7448
-Sensitivity: 0.4771 (TPR, Recall)
-Specificity: 0.8602 (TNR)
-Accuracy:    0.7036
---------------------------------------------------
-Confusion Matrix (threshold=0.5):
-  TP:  125  FN:  137
-  FP:   53  TN:  326
-==================================================
-
-==================================================
-INFERENCE COMPUTATIONAL METRICS
-==================================================
-Total inference time: 130.15s
-Number of samples: 641
-Average latency per image: 203.0ms
-Throughput: 4.92 images/sec
-Peak memory usage: 2.04 GB
-==================================================
-```
-
-### Training 50 Epochs (using Shen's method)
-
-```
-uv run python src/trainer_multiclass.py \
-    --model-name resnet50 \
-    --run-name cbis-patches-shen-schedule \
-    --data-dir datasets/prep/cbis-ddsm-patches
-Test Results:
-  Test Accuracy: 0.6820
-  Per-class accuracy:
-    Background: 0.8488
-    Benign mass: 0.5468
-    Malignant mass: 0.5497
-    Benign calc: 0.4537
-    Malignant calc: 0.5550
-```
-
-Seems to be worse than the simpler patch training.
-
-Inference
-
-```
-uv run python src/inference_multiclass.py  --data-dir datasets/prep/cbis-ddsm-roi --weights checkpoints/cbis-patches-shen-schedule/best_model.npz --model-name resnet50
-Loading model: resnet50 (5-class)
-Downloading weights for resnet50 from HuggingFace Hub.
-Loading weights: checkpoints/cbis-patches-shen-schedule/best_model.npz
-Loading samples from: datasets/prep/cbis-ddsm-roi/test.csv
-Total samples: 704
-  Benign: 428, Malignant: 276
-
-Running inference...
-Processed 704/704
-
-============================================================
-BINARY METRICS (Aggregated from 5-class predictions)
-============================================================
-P(malignant) = P(malignant_mass) + P(malignant_calc)
-------------------------------------------------------------
-AUC:         0.6945
-Sensitivity: 0.7500 (TPR, Recall)
-Specificity: 0.5117 (TNR)
-Accuracy:    0.6051
-------------------------------------------------------------
-Confusion Matrix (threshold=0.5):
-  TP:  207  FN:   69
-  FP:  209  TN:  219
-
-============================================================
-5-CLASS PREDICTION DISTRIBUTION
-============================================================
-
-For BENIGN samples (n=428):
-  Background          :   36 (  8.4%)
-  Benign mass         :   88 ( 20.6%)
-  Malignant mass      :   93 ( 21.7%)
-  Benign calc         :   86 ( 20.1%)
-  Malignant calc      :  125 ( 29.2%)
-
-For MALIGNANT samples (n=276):
-  Background          :   17 (  6.2%)
-  Benign mass         :   23 (  8.3%)
-  Malignant mass      :  107 ( 38.8%)
-  Benign calc         :   25 (  9.1%)
-  Malignant calc      :  104 ( 37.7%)
-============================================================
-```
-
-### Trainer Whole Image
-
-```
-uv run python src/trainer_whole_image.py \
-      --run-name cbis-whole-shen-wd \
-      --patch-weights checkpoints/cbis-patches-shen-schedule/best_model.npz \
-      --backbone resnet50
-
-==================================================
-TRAINING COMPUTATIONAL METRICS
-==================================================
-Total training time: 29340.3s (8.15 hours)
-Average epoch time: 571.7s
-Best validation AUC: 0.7895
-Peak memory usage: 9.50 GB
-==================================================
-
-Evaluating on test set...
-Test samples: 641
-Loading best model from checkpoints/cbis-whole-shen-wd/best_model.safetensors
-
-Test Results:
-  Loss: 0.7108
-  Accuracy: 0.6958
-  AUC: 0.7264
-```
-
-### Inference Whole Image TTA
+**W&B:** https://wandb.ai/lex/cm3070-mammography/runs/i4qjands
 
 ```bash
-uv run python src/inference_whole_image.py \
->       --data-dir datasets/prep/cbis-ddsm-whole \
->       --weights checkpoints/cbis-whole-shen-wd/best_model.safetensors \
->       --tta
-Creating model with backbone: resnet50
-Downloading weights for resnet50 from HuggingFace Hub.
-Loading weights: checkpoints/cbis-whole-shen-wd/best_model.safetensors
-Loading samples from: datasets/prep/cbis-ddsm-whole/test.csv
-Total samples: 641
-  Benign: 379, Malignant: 262
-
-Running inference with TTA (4 variants per image)...
-Processed 641/641 (TTA)
-
-==================================================
-RESULTS (with TTA)
-==================================================
-AUC:         0.7390
-Sensitivity: 0.3969 (TPR, Recall)
-Specificity: 0.8918 (TNR)
-Accuracy:    0.6895
---------------------------------------------------
-Confusion Matrix (threshold=0.5):
-  TP:  104  FN:  158
-  FP:   41  TN:  338
-==================================================
-
-==================================================
-INFERENCE COMPUTATIONAL METRICS
-==================================================
-Total inference time: 149.77s
-Number of samples: 641
-Average latency per image: 233.6ms
-Throughput: 4.28 images/sec
-Peak memory usage: 2.04 GB
-==================================================
-```
-
----
-
-Training using the crop method (no weight decay)
-
-```
-Training complete!
-
-==================================================
-TRAINING COMPUTATIONAL METRICS
-==================================================
-Total training time: 26102.2s (7.25 hours)
-Average epoch time: 508.7s
-Best validation AUC: 0.7626
-Peak memory usage: 9.50 GB
-==================================================
-
-Evaluating on test set...
-Test samples: 641
-Loading best model from checkpoints/cbis-whole-crop-v2-no-wc/best_model.safetensors
-
-Test Results:
-  Loss: 0.7668
-  Accuracy: 0.6225
-  AUC: 0.7225
-```
-
----
-
-Training using best patch weights with weight decay
-
-```
 uv run python src/trainer_whole_image.py \
-      --run-name cbis-whole-wd-only \
-      --data-dir datasets/prep/cbis-ddsm-whole \
-      --patch-weights checkpoints/cbis-patch-multi/best_model.npz \
-      --backbone resnet50 \
-      --stage1-weight-decay 0.001 \
-      --stage2-weight-decay 0.01
+    --run-name cbis-whole-wd-only \
+    --data-dir datasets/prep/cbis-ddsm-whole \
+    --patch-weights checkpoints/cbis-patch-multi/best_model.npz \
+    --backbone resnet50 \
+    --stage1-weight-decay 0.001 \
+    --stage2-weight-decay 0.01
 ```
 
-Results:
+| Metric | Value |
+|--------|-------|
+| Test AUC | 0.735 |
+| Test AUC (TTA) | 0.745 |
+| Val AUC | 0.835 |
+| Test Accuracy | 0.655 |
+| Sensitivity | 0.752 (TTA) |
+| Specificity | 0.610 (TTA) |
+| Training Time | 7.88h |
+| Peak Memory | 9.50 GB |
 
-Training complete!
+**Notes:** Best validation AUC. Selected as default base model for fine-tuning.
 
+---
+
+### cbis-whole-final
+
+**Objective:** Train on combined train+val set for maximum data utilization.
+
+**W&B:** https://wandb.ai/lex/cm3070-mammography/runs/hslysoda
+
+```bash
+uv run python src/trainer_whole_image.py \
+    --run-name cbis-whole-final \
+    --data-dir datasets/prep/cbis-ddsm-whole \
+    --patch-weights checkpoints/cbis-patch-multi/best_model.npz \
+    --backbone resnet50 \
+    --stage1-weight-decay 0.001 \
+    --stage2-weight-decay 0.01
 ```
-==================================================
-TRAINING COMPUTATIONAL METRICS
-==================================================
-Total training time: 28362.8s (7.88 hours)
-Average epoch time: 552.7s
-Best validation AUC: 0.8354
-Peak memory usage: 9.50 GB
-==================================================
 
-Evaluating on test set...
-Test samples: 641
-Loading best model from checkpoints/cbis-whole-wd-only/best_model.safetensors
+| Metric | Value |
+|--------|-------|
+| Test AUC | 0.737 |
+| Val AUC | 0.714 |
+| Test Accuracy | 0.674 |
 
-Test Results:
-  Loss: 0.6878
-  Accuracy: 0.6552
-  AUC: 0.7351
+**Notes:** Slightly higher test AUC but used test-set for model selection. Not recommended as base.
+
+---
+
+### cbis-whole-v1
+
+**Objective:** Initial whole-image training attempt.
+
+**W&B:** https://wandb.ai/lex/cm3070-mammography/runs/rnc6n0zv
+
+```bash
+uv run python src/trainer_whole_image.py \
+    --run-name cbis-whole-v1 \
+    --patch-weights checkpoints/cbis-patch-multi/best_model.npz \
+    --backbone resnet50
 ```
 
-TTA
+| Metric | Value |
+|--------|-------|
+| Test AUC | 0.734 |
+| Test AUC (TTA) | 0.745 |
+| Val AUC | 0.763 |
+| Test Accuracy | 0.683 |
 
+---
+
+### cbis-whole-shen-wd
+
+**Objective:** Use Shen schedule patch weights with weight decay.
+
+**W&B:** https://wandb.ai/lex/cm3070-mammography/runs/sy8uwh4j
+
+| Metric | Value |
+|--------|-------|
+| Test AUC | 0.726 |
+| Test AUC (TTA) | 0.739 |
+| Val AUC | 0.790 |
+| Training Time | 8.15h |
+
+**Notes:** Shen-schedule patch weights performed worse than simpler training.
+
+---
+
+## Fine-tuning Experiments
+
+### inbreast-whole-finetune
+
+**Objective:** Fine-tune base model on INbreast dataset (Portuguese FFDM).
+
+**W&B:** https://wandb.ai/lex/cm3070-mammography/runs/r4u682dq
+
+```bash
+uv run python src/finetune_whole_image.py \
+    --run-name inbreast-whole-finetune \
+    --data-dir datasets/prep/inbreast-whole \
+    --weights checkpoints/cbis-whole-wd-only/best_model.safetensors \
+    --backbone resnet50 \
+    --epochs 20
 ```
-uv run python src/inference_whole_image.py \
->       --data-dir datasets/prep/cbis-ddsm-whole \
->       --weights checkpoints/cbis-whole-wd-only/best_model.safetensors \
->       --tta
-Creating model with backbone: resnet50
-Downloading weights for resnet50 from HuggingFace Hub.
-Loading weights: checkpoints/cbis-whole-wd-only/best_model.safetensors
-Loading samples from: datasets/prep/cbis-ddsm-whole/test.csv
-Total samples: 641
-  Benign: 379, Malignant: 262
 
-Running inference with TTA (4 variants per image)...
-Processed 641/641 (TTA)
+| Metric | Value |
+|--------|-------|
+| Test AUC | 0.926 |
+| Val AUC | 0.808 |
+| Test Accuracy | 0.885 |
 
-==================================================
-RESULTS (with TTA)
-==================================================
-AUC:         0.7453
-Sensitivity: 0.7519 (TPR, Recall)
-Specificity: 0.6095 (TNR)
-Accuracy:    0.6677
---------------------------------------------------
-Confusion Matrix (threshold=0.5):
-  TP:  197  FN:   65
-  FP:  148  TN:  231
-==================================================
+**Notes:** Strong domain adaptation. Demonstrates fine-tuning effectiveness.
 
-==================================================
-INFERENCE COMPUTATIONAL METRICS
-==================================================
-Total inference time: 153.82s
-Number of samples: 641
-Average latency per image: 240.0ms
-Throughput: 4.17 images/sec
-Peak memory usage: 2.04 GB
-==================================================
+---
+
+### vindr-balanced-finetune
+
+**Objective:** Fine-tune on VinDr-Mammo dataset (Vietnamese hospitals).
+
+**W&B:** https://wandb.ai/lex/cm3070-mammography/runs/vp94ji8v
+
+```bash
+uv run python src/finetune_whole_image.py \
+    --run-name vindr-balanced-finetune \
+    --data-dir datasets/prep/vindr-whole-balanced \
+    --weights checkpoints/cbis-whole-wd-only/best_model.safetensors \
+    --backbone resnet50 \
+    --epochs 20
 ```
+
+| Metric | Value |
+|--------|-------|
+| Test AUC | 0.807 |
+| Val AUC | 0.805 |
+| Test Accuracy | 0.735 |
+
+---
+
+## Patch Classifier (Backbone Pre-training)
+
+### cbis-patch-multi
+
+**Objective:** Train 5-class patch classifier for backbone initialization.
+
+**W&B:** https://wandb.ai/lex/cm3070-mammography/runs/m956saga
+
+```bash
+uv run src/trainer_multiclass.py \
+    --model-name resnet50 \
+    --run-name cbis-patch-multi \
+    --data-dir datasets/prep/cbis-ddsm-patches
+```
+
+| Metric | Value |
+|--------|-------|
+| Test Accuracy | 0.720 |
+| Background Acc | 0.884 |
+| Benign Mass Acc | 0.620 |
+| Malignant Mass Acc | 0.527 |
+| Benign Calc Acc | 0.532 |
+| Malignant Calc Acc | 0.561 |
+
+**Notes:** Used as patch weights for whole-image training.
+
+---
+
+## Early Prototype Experiments
+
+These experiments used the simpler ROI-based approach before implementing Shen et al.
+
+### cbis-baseline
+
+**W&B:** https://wandb.ai/lex/cm3070-mammography/runs/8a2752sq
+
+| Dataset | AUC | Sensitivity | Specificity |
+|---------|-----|-------------|-------------|
+| CBIS-DDSM | 0.687 | 0.478 | 0.755 |
+| INbreast | 0.644 | 0.200 | 0.978 |
+
+### inbreast-finetune (ROI)
+
+**W&B:** https://wandb.ai/lex/cm3070-mammography/runs/sw5jgbb7
+
+| Metric | Before | After |
+|--------|--------|-------|
+| AUC | 0.644 | 0.928 |
+| Sensitivity | 0.200 | 0.533 |
+| Accuracy | 0.787 | 0.869 |
+
+**Notes:** Early demonstration that fine-tuning recovers performance on domain-shifted data.
