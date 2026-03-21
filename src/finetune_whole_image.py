@@ -5,7 +5,6 @@ Todo: comment and refactor.
 """
 
 import argparse
-import csv
 import time
 from pathlib import Path
 
@@ -13,41 +12,12 @@ import mlx.core as mx
 import mlx.nn as nn
 import mlx.optimizers as optim
 import numpy as np
-from mlxim.data import DataLoader
-from mlxim.data._base import Dataset
-from PIL import Image
-
 import wandb
+from mlxim.data import DataLoader
+
+from src.datasets import CSVDataset
 from src.models.whole_image_classifier import create_whole_image_classifier
 from src.transforms import get_inference_transform, get_train_transform
-
-
-class WholeImageDataset(Dataset):
-    def __init__(self, csv_path, img_dir, transform=None):
-        self.img_dir = Path(img_dir)
-        self.transform = transform
-        self.samples = []
-
-        with open(csv_path) as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                self.samples.append((row['filename'], int(row['label'])))
-
-    def __len__(self):
-        return len(self.samples)
-
-    def __getitem__(self, idx):
-        filename, label = self.samples[idx]
-        img_path = self.img_dir / filename
-
-        img = Image.open(img_path).convert('RGB')
-        img = np.array(img).astype(np.uint8)
-
-        if self.transform:
-            img = self.transform(image=img)['image']
-
-        img = img.astype(np.float32) / 255.0
-        return mx.array(img), mx.array(label)
 
 
 class FineTuner:
@@ -252,8 +222,8 @@ def main():
     train_transform = get_train_transform(args.target_height, args.target_width)
     val_transform = get_inference_transform(args.target_height, args.target_width)
 
-    train_dataset = WholeImageDataset(str(TRAIN_CSV), str(IMG_DIR), train_transform)
-    val_dataset = WholeImageDataset(str(VAL_CSV), str(IMG_DIR), val_transform)
+    train_dataset = CSVDataset(str(TRAIN_CSV), str(IMG_DIR), train_transform)
+    val_dataset = CSVDataset(str(VAL_CSV), str(IMG_DIR), val_transform)
 
     print(f"Training samples: {len(train_dataset)}")
     print(f"Validation samples: {len(val_dataset)}")
@@ -307,7 +277,7 @@ def main():
 
     print("\nEvaluating on test set...")
     TEST_CSV = DATA_DIR / "test.csv"
-    test_dataset = WholeImageDataset(str(TEST_CSV), str(IMG_DIR), val_transform)
+    test_dataset = CSVDataset(str(TEST_CSV), str(IMG_DIR), val_transform)
     print(f"Test samples: {len(test_dataset)}")
 
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
