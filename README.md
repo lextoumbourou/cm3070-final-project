@@ -139,11 +139,12 @@ uv run train
 Create small VinDr datasets for UI testing:
 
 ```bash
+uv run python scripts/create_dataset.py --preset large
 uv run python scripts/create_dataset.py --preset tiny
 uv run python scripts/create_dataset.py --preset small
 ```
 
-Output: `datasets/prep/vindr-ui-tiny/` or `datasets/prep/vindr-ui-small/`
+Output: `datasets/prep/vindr-ui-${present}/`
 
 ## Testing
 
