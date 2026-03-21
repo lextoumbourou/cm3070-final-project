@@ -410,9 +410,7 @@ def project_overview_tab():
                     if weights_file.exists():
                         weights_path = str(weights_file)
                         model_info = get_model_display_info(weights_path)
-                        model_name = model_dir.name
-                        is_default = MODEL_DESCRIPTIONS.get(model_name, {}).get("is_default", False)
-                        all_models.append((weights_path, model_info, is_default))
+                        all_models.append((weights_path, model_info, model_info.is_default))
 
         # Sort default model, then vendor models, then user models (alphabetically within groups)
         all_models.sort(key=lambda x: (not x[2], not x[1].is_vendor, x[1].name.lower()))

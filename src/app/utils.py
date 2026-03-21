@@ -24,37 +24,31 @@ from src.app.types import (
 )
 from src.models.whole_image_classifier import create_whole_image_classifier
 
-MODEL_DESCRIPTIONS = {
-    "cbis-whole-wd-only": {
-        "name": "CBIS-DDSM Base Model (Default)",
-        "description": (
-            "Trained on CBIS-DDSM dataset. "
-            "Use this as a starting point for fine-tuning."
-        ),
-        "is_default": True,
-        "vendor": True,
-    },
-    "cbis-whole-final": {
-        "name": "CBIS-DDSM Final",
-        "description": (
+MODEL_DESCRIPTIONS: dict[str, ModelInfo] = {
+    "cbis-whole-wd-only": ModelInfo(
+        name="CBIS-DDSM Base Model (Default)",
+        description="Trained on CBIS-DDSM dataset. Use this as a starting point for fine-tuning.",
+        is_vendor=True,
+        is_default=True,
+    ),
+    "cbis-whole-final": ModelInfo(
+        name="CBIS-DDSM Final",
+        description=(
             "Trained on CBIS-DDSM train+val set. "
             "Slightly higher AUC but used test-set selection."
         ),
-        "is_default": False,
-        "vendor": True,
-    },
-    "inbreast-whole-finetune": {
-        "name": "INbreast Fine-tuned",
-        "description": "Fine-tuned on INbreast dataset (Portuguese FFDM).",
-        "is_default": False,
-        "vendor": True,
-    },
-    "vindr-balanced-finetune": {
-        "name": "VinDr Fine-tuned",
-        "description": "Fine-tuned on VinDr-Mammo dataset (Vietnamese hospitals).",
-        "is_default": False,
-        "vendor": True,
-    },
+        is_vendor=True,
+    ),
+    "inbreast-whole-finetune": ModelInfo(
+        name="INbreast Fine-tuned",
+        description="Fine-tuned on INbreast dataset (Portuguese FFDM).",
+        is_vendor=True,
+    ),
+    "vindr-balanced-finetune": ModelInfo(
+        name="VinDr Fine-tuned",
+        description="Fine-tuned on VinDr-Mammo dataset (Vietnamese hospitals).",
+        is_vendor=True,
+    ),
 }
 
 
@@ -62,14 +56,8 @@ def get_model_display_info(weights_path: str) -> ModelInfo:
     """Get display name and description for a model."""
     model_name = Path(weights_path).parent.name
     if model_name in MODEL_DESCRIPTIONS:
-        info = MODEL_DESCRIPTIONS[model_name]
-        return ModelInfo(
-            name=info["name"],
-            description=info["description"],
-            is_vendor=info.get("vendor", False),
-        )
-    else:
-        return ModelInfo(name=model_name, description="User fine-tuned model", is_vendor=False)
+        return MODEL_DESCRIPTIONS[model_name]
+    return ModelInfo(name=model_name, description="User fine-tuned model")
 
 
 def load_model(weights_path: str | None):

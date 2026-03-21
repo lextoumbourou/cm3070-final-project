@@ -23,7 +23,8 @@ class ModelInfo:
 
     name: str
     description: str
-    is_vendor: bool
+    is_vendor: bool = False
+    is_default: bool = False
 
 
 class Classification(Enum):
