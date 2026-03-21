@@ -111,6 +111,19 @@ class InferenceResult:
     classification: Classification
 
 
+@dataclass
+class EvaluationMetrics:
+    """Metrics from evaluating a model on a dataset."""
+
+    auc: float
+    sensitivity: float
+    specificity: float
+    accuracy: float
+    n_samples: int
+    n_malignant: int
+    n_benign: int
+
+
 def get_model_display_info(weights_path: str) -> ModelInfo:
     """Get display name and description for a model."""
     model_name = Path(weights_path).parent.name
@@ -236,7 +249,7 @@ def stratified_train_val_split(benign_files, malignant_files, val_fraction=0.2):
     return train_benign, train_malignant, val_benign, val_malignant
 
 
-def evaluate_model(model, dataset):
+def evaluate_model(model, dataset) -> EvaluationMetrics:
     """Evaluate model on a dataset, returning AUC, sensitivity, specificity."""
     model.eval()
     loader = DataLoader(dataset, batch_size=2, shuffle=False, num_workers=0)
@@ -269,15 +282,15 @@ def evaluate_model(model, dataset):
     specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
     accuracy = (tp + tn) / len(all_labels) if len(all_labels) > 0 else 0.0
 
-    return {
-        "auc": auc,
-        "sensitivity": sensitivity,
-        "specificity": specificity,
-        "accuracy": accuracy,
-        "n_samples": len(all_labels),
-        "n_malignant": int(np.sum(all_labels)),
-        "n_benign": int(np.sum(all_labels == 0)),
-    }
+    return EvaluationMetrics(
+        auc=auc,
+        sensitivity=sensitivity,
+        specificity=specificity,
+        accuracy=accuracy,
+        n_samples=len(all_labels),
+        n_malignant=int(np.sum(all_labels)),
+        n_benign=int(np.sum(all_labels == 0)),
+    )
 
 
 class FolderDataset(Dataset):
@@ -418,13 +431,15 @@ def inference_tab():
             metrics = result["metrics"]
 
             metric_cols = st.columns(4)
-            metric_cols[0].metric("AUC", f"{metrics['auc']:.3f}")
-            metric_cols[1].metric("Sensitivity", f"{metrics['sensitivity']:.1%}")
-            metric_cols[2].metric("Specificity", f"{metrics['specificity']:.1%}")
-            metric_cols[3].metric("Accuracy", f"{metrics['accuracy']:.1%}")
+            metric_cols[0].metric("AUC", f"{metrics.auc:.3f}")
+            metric_cols[1].metric("Sensitivity", f"{metrics.sensitivity:.1%}")
+            metric_cols[2].metric("Specificity", f"{metrics.specificity:.1%}")
+            metric_cols[3].metric("Accuracy", f"{metrics.accuracy:.1%}")
 
-            st.caption(f"Evaluated on {metrics['n_samples']} images "
-                      f"({metrics['n_malignant']} malignant, {metrics['n_benign']} benign)")
+            st.caption(
+                f"Evaluated on {metrics.n_samples} images "
+                f"({metrics.n_malignant} malignant, {metrics.n_benign} benign)"
+            )
 
             # Show comparison if multiple models have been evaluated
             if len(st.session_state.batch_results) > 1:
@@ -435,9 +450,9 @@ def inference_tab():
                     m = res["metrics"]
                     comparison_data.append({
                         "Model": res["model_name"],
-                        "AUC": f"{m['auc']:.3f}",
-                        "Sensitivity": f"{m['sensitivity']:.1%}",
-                        "Specificity": f"{m['specificity']:.1%}",
+                        "AUC": f"{m.auc:.3f}",
+                        "Sensitivity": f"{m.sensitivity:.1%}",
+                        "Specificity": f"{m.specificity:.1%}",
                     })
                 st.table(comparison_data)
 
@@ -630,17 +645,18 @@ def finetune_tab():
             st.metric("Model Saved To", str(output_path))
 
         with col2:
-            st.metric("Validation AUC", f"{val_metrics['auc']:.3f}")
-            st.metric("Sensitivity", f"{val_metrics['sensitivity']:.1%}")
-            st.metric("Specificity", f"{val_metrics['specificity']:.1%}")
+            st.metric("Validation AUC", f"{val_metrics.auc:.3f}")
+            st.metric("Sensitivity", f"{val_metrics.sensitivity:.1%}")
+            st.metric("Specificity", f"{val_metrics.specificity:.1%}")
 
         st.caption(
-            f"Validated on {val_metrics['n_samples']} images "
-            f"({val_metrics['n_malignant']} malignant, {val_metrics['n_benign']} benign)")
+            f"Validated on {val_metrics.n_samples} images "
+            f"({val_metrics.n_malignant} malignant, {val_metrics.n_benign} benign)"
+        )
 
         # Result interpretation and guidance
         st.divider()
-        auc = val_metrics['auc']
+        auc = val_metrics.auc
 
         if auc >= 0.80:
             st.success(
