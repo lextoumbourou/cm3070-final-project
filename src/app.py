@@ -1,8 +1,10 @@
 """Streamlit web interface for mammogram classification and fine-tuning."""
 
 import sys
+import tempfile
 import time
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 
 import mlx.core as mx
@@ -94,6 +96,21 @@ class ModelInfo:
     is_vendor: bool
 
 
+class Classification(Enum):
+    """Binary classification result."""
+
+    BENIGN = "Benign"
+    MALIGNANT = "Malignant"
+
+
+@dataclass
+class InferenceResult:
+    """Result of running inference on a single image."""
+
+    malignant_prob: float
+    classification: Classification
+
+
 def get_model_display_info(weights_path: str) -> ModelInfo:
     """Get display name and description for a model."""
     model_name = Path(weights_path).parent.name
@@ -122,7 +139,6 @@ def load_model(weights_path):
 
 
 def load_dicom(file_bytes):
-    import tempfile
     with tempfile.NamedTemporaryFile(suffix=".dcm", delete=False) as tmp:
         tmp.write(file_bytes)
         tmp_path = tmp.name
@@ -137,14 +153,15 @@ def load_dicom(file_bytes):
     return pixel_array
 
 
-def run_inference(model, img):
+def run_inference(model, img) -> InferenceResult:
+    """Run inference on a single preprocessed image."""
     inputs = mx.expand_dims(img, 0)
     logits = model(inputs)
     probs = mx.softmax(logits, axis=1)
     mx.eval(probs)
     malignant_prob = probs[0, 1].item()
-    classification = "Malignant" if malignant_prob >= 0.5 else "Benign"
-    return malignant_prob, classification
+    classification = Classification.MALIGNANT if malignant_prob >= 0.5 else Classification.BENIGN
+    return InferenceResult(malignant_prob=malignant_prob, classification=classification)
 
 
 def get_confidence_description(malignant_prob):
@@ -456,27 +473,27 @@ def inference_tab():
                 st.image(img_array, use_container_width=True)
 
             processed_img = preprocess_image(img_array, transform)
-            malignant_prob, classification = run_inference(model, processed_img)
+            result = run_inference(model, processed_img)
 
             with col2:
                 st.subheader("Prediction")
-                if classification == "Malignant":
-                    st.error(f"**{classification}**")
+                if result.classification == Classification.MALIGNANT:
+                    st.error(f"**{result.classification.value}**")
                 else:
-                    st.success(f"**{classification}**")
+                    st.success(f"**{result.classification.value}**")
 
-                st.metric("Malignancy Probability", f"{malignant_prob:.1%}")
-                st.progress(malignant_prob)
+                st.metric("Malignancy Probability", f"{result.malignant_prob:.1%}")
+                st.progress(result.malignant_prob)
 
                 # Add confidence explanation
                 confidence_level, confidence_explanation = get_confidence_description(
-                    malignant_prob
+                    result.malignant_prob
                 )
                 st.markdown(f"**Confidence:** {confidence_level}")
                 st.caption(confidence_explanation)
 
                 # Warn about potential out-of-distribution inputs
-                if malignant_prob < 0.01 or malignant_prob > 0.99:
+                if result.malignant_prob < 0.01 or result.malignant_prob > 0.99:
                     st.warning(
                         "**Extreme prediction detected.** "
                         "Please verify this is a valid mammogram image. "
