@@ -49,7 +49,7 @@ MODEL_DESCRIPTIONS = {
         "is_default": False,
         "vendor": True,
     },
-    "vindr-whole-finetune": {
+    "vindr-balanced-finetune": {
         "name": "VinDr Fine-tuned",
         "description": "Fine-tuned on VinDr-Mammo dataset (Vietnamese hospitals).",
         "is_default": False,

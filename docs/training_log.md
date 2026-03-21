@@ -17,7 +17,7 @@
 
 ### cbis-whole-wd-only (Default Model)
 
-**Objective:** Train whole-image classifier with weight decay regularization.
+**Objective:** Train whole-image classifier with weight decay regularisation.
 
 **W&B:** https://wandb.ai/lex/cm3070-mammography/runs/i4qjands
 
@@ -25,11 +25,13 @@
 uv run python src/trainer_whole_image.py \
     --run-name cbis-whole-wd-only \
     --data-dir datasets/prep/cbis-ddsm-whole \
-    --patch-weights checkpoints/cbis-patch-multi/best_model.npz \
+    --patch-weights checkpoints/user/cbis-patch-multi/best_model.npz \
     --backbone resnet50 \
     --stage1-weight-decay 0.001 \
     --stage2-weight-decay 0.01
 ```
+
+**Weights:** `checkpoints/default/cbis-whole-wd-only/best_model.safetensors`
 
 | Metric | Value |
 |--------|-------|
@@ -56,11 +58,13 @@ uv run python src/trainer_whole_image.py \
 uv run python src/trainer_whole_image.py \
     --run-name cbis-whole-final \
     --data-dir datasets/prep/cbis-ddsm-whole \
-    --patch-weights checkpoints/cbis-patch-multi/best_model.npz \
+    --patch-weights checkpoints/user/cbis-patch-multi/best_model.npz \
     --backbone resnet50 \
     --stage1-weight-decay 0.001 \
     --stage2-weight-decay 0.01
 ```
+
+**Weights:** `checkpoints/default/cbis-whole-final/best_model.safetensors`
 
 | Metric | Value |
 |--------|-------|
@@ -81,7 +85,7 @@ uv run python src/trainer_whole_image.py \
 ```bash
 uv run python src/trainer_whole_image.py \
     --run-name cbis-whole-v1 \
-    --patch-weights checkpoints/cbis-patch-multi/best_model.npz \
+    --patch-weights checkpoints/user/cbis-patch-multi/best_model.npz \
     --backbone resnet50
 ```
 
@@ -123,10 +127,12 @@ uv run python src/trainer_whole_image.py \
 uv run python src/finetune_whole_image.py \
     --run-name inbreast-whole-finetune \
     --data-dir datasets/prep/inbreast-whole \
-    --weights checkpoints/cbis-whole-wd-only/best_model.safetensors \
+    --weights checkpoints/default/cbis-whole-wd-only/best_model.safetensors \
     --backbone resnet50 \
     --epochs 20
 ```
+
+**Weights:** `checkpoints/default/inbreast-whole-finetune/best_model.safetensors`
 
 | Metric | Value |
 |--------|-------|
@@ -148,10 +154,12 @@ uv run python src/finetune_whole_image.py \
 uv run python src/finetune_whole_image.py \
     --run-name vindr-balanced-finetune \
     --data-dir datasets/prep/vindr-whole-balanced \
-    --weights checkpoints/cbis-whole-wd-only/best_model.safetensors \
+    --weights checkpoints/default/cbis-whole-wd-only/best_model.safetensors \
     --backbone resnet50 \
     --epochs 20
 ```
+
+**Weights:** `checkpoints/default/vindr-balanced-finetune/best_model.safetensors`
 
 | Metric | Value |
 |--------|-------|
