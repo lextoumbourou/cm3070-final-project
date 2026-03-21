@@ -4,10 +4,10 @@
 
 | Run | Dataset | Test AUC | Test Acc | Val AUC | Training Time | W&B |
 |-----|---------|----------|----------|---------|---------------|-----|
-| **cbis-whole-wd-only** | CBIS-DDSM | 0.735 | 0.655 | 0.835 | 7.88h | [link](https://wandb.ai/lex/cm3070-mammography/runs/i4qjands) |
-| cbis-whole-final | CBIS-DDSM (train+val) | 0.737 | 0.674 | 0.714 | - | [link](https://wandb.ai/lex/cm3070-mammography/runs/hslysoda) |
-| inbreast-whole-finetune | INbreast | 0.926 | 0.885 | 0.808 | - | [link](https://wandb.ai/lex/cm3070-mammography/runs/r4u682dq) |
-| vindr-balanced-finetune | VinDr | 0.807 | 0.735 | 0.805 | - | [link](https://wandb.ai/lex/cm3070-mammography/runs/vp94ji8v) |
+| **cbis-whole-wd-only** | CBIS-DDSM | 0.735 | 0.655 | 0.835 | 7.89h | [link](https://wandb.ai/lex/cm3070-mammography/runs/i4qjands) |
+| cbis-whole-final | CBIS-DDSM (train+val) | 0.737 | 0.674 | 0.714 | 10.08h | [link](https://wandb.ai/lex/cm3070-mammography/runs/hslysoda) |
+| inbreast-whole-finetune | INbreast | 0.926 | 0.885 | 0.808 | 0.64h | [link](https://wandb.ai/lex/cm3070-mammography/runs/r4u682dq) |
+| vindr-balanced-finetune | VinDr | 0.807 | 0.735 | 0.805 | 2.68h | [link](https://wandb.ai/lex/cm3070-mammography/runs/vp94ji8v) |
 
 **Bold** = default model shipped with app.
 
@@ -41,7 +41,7 @@ uv run python src/trainer_whole_image.py \
 | Test Accuracy | 0.655 |
 | Sensitivity | 0.752 (TTA) |
 | Specificity | 0.610 (TTA) |
-| Training Time | 7.88h |
+| Training Time | 7.89h |
 | Peak Memory | 9.50 GB |
 
 **Notes:** Best validation AUC. Selected as default base model for fine-tuning.
@@ -71,6 +71,7 @@ uv run python src/trainer_whole_image.py \
 | Test AUC | 0.737 |
 | Val AUC | 0.714 |
 | Test Accuracy | 0.674 |
+| Training Time | 10.08h |
 
 **Notes:** Slightly higher test AUC but used test-set for model selection. Not recommended as base.
 
@@ -95,6 +96,7 @@ uv run python src/trainer_whole_image.py \
 | Test AUC (TTA) | 0.745 |
 | Val AUC | 0.763 |
 | Test Accuracy | 0.683 |
+| Training Time | 8.65h |
 
 ---
 
@@ -139,6 +141,7 @@ uv run python src/finetune_whole_image.py \
 | Test AUC | 0.926 |
 | Val AUC | 0.808 |
 | Test Accuracy | 0.885 |
+| Training Time | 0.64h (38 min) |
 
 **Notes:** Strong domain adaptation. Demonstrates fine-tuning effectiveness.
 
@@ -166,6 +169,7 @@ uv run python src/finetune_whole_image.py \
 | Test AUC | 0.807 |
 | Val AUC | 0.805 |
 | Test Accuracy | 0.735 |
+| Training Time | 2.68h |
 
 ---
 
@@ -192,6 +196,7 @@ uv run src/trainer_multiclass.py \
 | Malignant Mass Acc | 0.527 |
 | Benign Calc Acc | 0.532 |
 | Malignant Calc Acc | 0.561 |
+| Training Time | 1.78h |
 
 **Notes:** Used as patch weights for whole-image training.
 
