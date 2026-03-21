@@ -9,7 +9,6 @@ from PIL import Image
 
 from src.app.types import Classification
 from src.app.utils import (
-    MODEL_DESCRIPTIONS,
     FolderDataset,
     evaluate_model,
     get_confidence_description,

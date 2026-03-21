@@ -10,24 +10,45 @@ import cv2
 import mlx.core as mx
 import numpy as np
 
-# Dimensions for whole image classification (2nd phase of pipeline).
+# Dimensions for whole image classification.
 DEFAULT_HEIGHT = 896
 DEFAULT_WIDTH = 1152
 
+# Dimensions for patch classification.
+PATCH_SIZE = 224
 
-def get_inference_transform(
-    height: int = DEFAULT_HEIGHT,
-    width: int = DEFAULT_WIDTH,
-) -> A.Compose:
-    """Get transform for inference/validation (resize only)."""
-    return A.Compose([A.Resize(height=height, width=width)])
+
+def get_patch_train_transform(output_size: int = PATCH_SIZE) -> A.Compose:
+    """
+    Training augmentations for patch-based classification.
+
+    Uses lighter augmentations than the 2nd phase, as risk of overfitting is a lower.
+    """
+    return A.Compose([
+        A.HorizontalFlip(p=0.5),
+        A.VerticalFlip(p=0.5),
+        A.Rotate(limit=25, p=0.5, border_mode=cv2.BORDER_CONSTANT),
+        A.OneOf([
+            A.RandomBrightnessContrast(brightness_limit=0.15, contrast_limit=0.3, p=0.5),
+            A.RandomGamma(gamma_limit=(80, 120), p=0.5),
+        ], p=0.5),
+        A.RandomResizedCrop(
+            height=output_size, width=output_size, scale=(0.9, 1.0), p=0.3
+        ),
+        A.Resize(height=output_size, width=output_size),
+    ])
+
+
+def get_patch_inference_transform(output_size: int = PATCH_SIZE) -> A.Compose:
+    """Inference transform for patch-based classification (resize only)."""
+    return A.Compose([A.Resize(height=output_size, width=output_size)])
 
 
 def get_train_transform(
     height: int = DEFAULT_HEIGHT,
     width: int = DEFAULT_WIDTH,
 ) -> A.Compose:
-    """Get transform for training with augmentations."""
+    """Training augmentations for whole-image classification."""
     return A.Compose([
         A.HorizontalFlip(p=0.5),
         A.VerticalFlip(p=0.5),
@@ -36,6 +57,14 @@ def get_train_transform(
         A.RandomBrightnessContrast(brightness_limit=0.08, contrast_limit=0.2, p=0.5),
         A.Resize(height=height, width=width),
     ])
+
+
+def get_inference_transform(
+    height: int = DEFAULT_HEIGHT,
+    width: int = DEFAULT_WIDTH,
+) -> A.Compose:
+    """Inference transform for whole-image classification (resize only)."""
+    return A.Compose([A.Resize(height=height, width=width)])
 
 
 def get_tta_transforms(

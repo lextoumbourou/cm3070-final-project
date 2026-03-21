@@ -12,9 +12,9 @@ import mlx.core as mx
 import mlx.nn as nn
 import mlx.optimizers as optim
 import numpy as np
-import wandb
 from mlxim.data import DataLoader
 
+import wandb
 from src.datasets import CSVDataset
 from src.models.whole_image_classifier import create_whole_image_classifier
 from src.transforms import get_inference_transform, get_train_transform

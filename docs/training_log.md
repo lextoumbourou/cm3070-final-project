@@ -25,7 +25,7 @@
 uv run python src/trainer_whole_image.py \
     --run-name cbis-whole-wd-only \
     --data-dir datasets/prep/cbis-ddsm-whole \
-    --patch-weights checkpoints/user/cbis-patch-multi/best_model.npz \
+    --patch-weights checkpoints/default/cbis-patch-multi/best_model.npz \
     --backbone resnet50 \
     --stage1-weight-decay 0.001 \
     --stage2-weight-decay 0.01

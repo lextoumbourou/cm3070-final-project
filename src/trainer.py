@@ -1,5 +1,4 @@
 import argparse
-import csv
 import time
 from pathlib import Path
 
@@ -8,60 +7,59 @@ import cv2
 import mlx.core as mx
 import mlx.nn as nn
 import mlx.optimizers as optim
-import numpy as np
 from mlxim.data import DataLoader
-from mlxim.data._base import Dataset
 from mlxim.model import create_model
-from PIL import Image
 
 import wandb
+from src.datasets import CSVDataset
 from src.model_utils import freeze_backbone
 
 
 def get_train_transform(aug_size: int = 512, output_size: int = 224):
-    """Get training augmentation pipeline.
+    """Get training augmentation pipeline for ROI/patch training.
 
     Args:
         aug_size: Size at which to apply augmentations (should match input image size)
         output_size: Final output size for model input
     """
     return A.Compose([
-        # Crops - applied at full resolution for better detail preservation
         A.RandomResizedCrop(height=aug_size, width=aug_size, scale=(0.5, 1.0), p=0.4),
-
-        # Flips
         A.HorizontalFlip(p=0.5),
         A.VerticalFlip(p=0.5),
-
-        # Downscale - simulates lower resolution acquisitions
         A.Downscale(scale_min=0.75, scale_max=0.95, interpolation=cv2.INTER_LINEAR, p=0.125),
-
-        # Contrast - simulates exposure variations
         A.OneOf([
             A.RandomToneCurve(scale=0.3, p=0.5),
-            A.RandomBrightnessContrast(brightness_limit=(-0.1, 0.2), contrast_limit=(-0.4, 0.5),
-            brightness_by_max=True, p=0.5)
+            A.RandomBrightnessContrast(
+                brightness_limit=(-0.1, 0.2),
+                contrast_limit=(-0.4, 0.5),
+                brightness_by_max=True,
+                p=0.5,
+            ),
         ], p=0.5),
-
-        # Geometric - simulates positioning variations
         A.OneOf([
             A.Affine(
-                scale=(0.85, 1.15), rotate=(-30, 30),
-                translate_percent={'x': (-0.1, 0.1), 'y': (-0.2, 0.2)},
+                scale=(0.85, 1.15),
+                rotate=(-30, 30),
+                translate_percent={"x": (-0.1, 0.1), "y": (-0.2, 0.2)},
                 mode=cv2.BORDER_CONSTANT,
-                p=0.6
+                p=0.6,
             ),
             A.ElasticTransform(
-                alpha=1, sigma=20, interpolation=cv2.INTER_LINEAR,
-                border_mode=cv2.BORDER_CONSTANT, approximate=False, p=0.2
+                alpha=1,
+                sigma=20,
+                interpolation=cv2.INTER_LINEAR,
+                border_mode=cv2.BORDER_CONSTANT,
+                approximate=False,
+                p=0.2,
             ),
             A.GridDistortion(
-                num_steps=5, distort_limit=0.3, interpolation=cv2.INTER_LINEAR,
-                border_mode=cv2.BORDER_CONSTANT, p=0.2
+                num_steps=5,
+                distort_limit=0.3,
+                interpolation=cv2.INTER_LINEAR,
+                border_mode=cv2.BORDER_CONSTANT,
+                p=0.2,
             ),
         ], p=0.5),
-
-        # Final resize to model input size - done AFTER augmentations
         A.Resize(height=output_size, width=output_size),
     ], p=1.0)
 
@@ -71,50 +69,6 @@ def get_val_transform(output_size: int = 224):
     return A.Compose([
         A.Resize(height=output_size, width=output_size),
     ])
-
-
-class CSVDataset(Dataset):
-    """Dataset that loads images from CSV file with filename and label columns."""
-
-    def __init__(
-        self,
-        csv_path: str,
-        img_dir: str,
-        transform=None,
-    ):
-        self.img_dir = Path(img_dir)
-        self.transform = transform
-        self.samples = []
-
-        with open(csv_path) as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                filename = row['filename']
-                label = int(row['label'])
-                self.samples.append((filename, label))
-
-    def __len__(self):
-        return len(self.samples)
-
-    def __getitem__(self, idx):
-        filename, label = self.samples[idx]
-        img_path = self.img_dir / filename
-
-        # Load image at original size (512x512 from preprocessing)
-        img = Image.open(img_path).convert('RGB')
-        img = np.array(img).astype(np.uint8)
-
-        # Apply albumentations transform (includes augmentation + final resize)
-        if self.transform:
-            img = self.transform(image=img)['image']
-
-        # Normalize to float32 [0, 1]
-        img = img.astype(np.float32) / 255.0
-
-        img = mx.array(img)
-        label = mx.array(label)
-
-        return img, label
 
 
 class Trainer:

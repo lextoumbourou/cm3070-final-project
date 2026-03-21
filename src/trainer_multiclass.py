@@ -10,105 +10,23 @@ Classes:
 """
 
 import argparse
-import csv
 from collections import Counter
 from pathlib import Path
 
-import albumentations as A
-import cv2
 import mlx.core as mx
 import mlx.nn as nn
 import mlx.optimizers as optim
 import numpy as np
 from mlxim.data import DataLoader
-from mlxim.data._base import Dataset
 from mlxim.model import create_model
-from PIL import Image
 
 import wandb
+from src.datasets import CSVDataset
 from src.model_utils import freeze_backbone, freeze_backbone_except_top_n
+from src.transforms import get_patch_inference_transform, get_patch_train_transform
 
 NUM_CLASSES = 5
 CLASS_NAMES = ["Background", "Benign mass", "Malignant mass", "Benign calc", "Malignant calc"]
-
-
-def get_train_transform(aug_size: int = 224, output_size: int = 224):
-    """
-    Training augmentation pipeline.
-
-    For patch-based training, images are already 224x224, so we use lighter augmentations.
-    """
-    return A.Compose([
-        # Flips
-        A.HorizontalFlip(p=0.5),
-        A.VerticalFlip(p=0.5),
-
-        # Rotation - mammograms can have various orientations
-        A.Rotate(limit=25, p=0.5, border_mode=cv2.BORDER_CONSTANT),
-
-        # Intensity variations - simulates exposure differences
-        A.OneOf([
-            A.RandomBrightnessContrast(brightness_limit=0.15, contrast_limit=0.3, p=0.5),
-            A.RandomGamma(gamma_limit=(80, 120), p=0.5),
-        ], p=0.5),
-
-        # Slight zoom/scale variations
-        A.RandomResizedCrop(height=output_size, width=output_size, scale=(0.9, 1.0), p=0.3),
-
-        # Ensure final size
-        A.Resize(height=output_size, width=output_size),
-    ], p=1.0)
-
-
-def get_val_transform(output_size: int = 224):
-    """Get validation/test transform (just resize, no augmentation)."""
-    return A.Compose([
-        A.Resize(height=output_size, width=output_size),
-    ])
-
-
-class CSVDataset(Dataset):
-    """Dataset that loads images from CSV file with filename and label columns."""
-
-    def __init__(
-        self,
-        csv_path: str,
-        img_dir: str,
-        transform=None,
-    ):
-        self.img_dir = Path(img_dir)
-        self.transform = transform
-        self.samples = []
-
-        with open(csv_path) as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                filename = row['filename']
-                label = int(row['label'])
-                self.samples.append((filename, label))
-
-    def __len__(self):
-        return len(self.samples)
-
-    def __getitem__(self, idx):
-        filename, label = self.samples[idx]
-        img_path = self.img_dir / filename
-
-        # Load image (patches are already 224x224)
-        img = Image.open(img_path).convert('RGB')
-        img = np.array(img).astype(np.uint8)
-
-        # Apply albumentations transform
-        if self.transform:
-            img = self.transform(image=img)['image']
-
-        # Normalize to float32 [0, 1]
-        img = img.astype(np.float32) / 255.0
-
-        img = mx.array(img)
-        label = mx.array(label)
-
-        return img, label
 
 
 def compute_class_weights(dataset: CSVDataset) -> mx.array:
@@ -409,8 +327,8 @@ def main():
     )
 
     print("Loading datasets...")
-    train_transform = get_train_transform(output_size=IMAGE_SIZE)
-    val_transform = get_val_transform(output_size=IMAGE_SIZE)
+    train_transform = get_patch_train_transform(output_size=IMAGE_SIZE)
+    val_transform = get_patch_inference_transform(output_size=IMAGE_SIZE)
 
     train_dataset = CSVDataset(
         csv_path=str(TRAIN_CSV),
