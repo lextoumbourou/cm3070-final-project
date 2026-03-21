@@ -134,6 +134,27 @@ def run_inference(model, img):
     return malignant_prob, classification
 
 
+def get_confidence_description(malignant_prob):
+    """Get a textual description of model confidence."""
+    # Confidence is distance from decision boundary, scaled to 0-1
+    confidence = abs(malignant_prob - 0.5) * 2
+
+    if confidence >= 0.8:
+        level = "Very high"
+        explanation = "The model is very certain about this prediction."
+    elif confidence >= 0.5:
+        level = "High"
+        explanation = "The model is fairly certain about this prediction."
+    elif confidence >= 0.2:
+        level = "Moderate"
+        explanation = "The model shows reasonable certainty."
+    else:
+        level = "Low"
+        explanation = "The model has low confidence. Consider additional review."
+
+    return level, explanation
+
+
 def validate_training_folder(folder_path):
     folder = Path(folder_path)
     if not folder.exists():
@@ -426,8 +447,22 @@ def inference_tab():
                     st.error(f"**{classification}**")
                 else:
                     st.success(f"**{classification}**")
+
                 st.metric("Malignancy Probability", f"{malignant_prob:.1%}")
                 st.progress(malignant_prob)
+
+                # Add confidence explanation
+                confidence_level, confidence_explanation = get_confidence_description(malignant_prob)
+                st.markdown(f"**Confidence:** {confidence_level}")
+                st.caption(confidence_explanation)
+
+                # Warn about potential out-of-distribution inputs
+                if malignant_prob < 0.01 or malignant_prob > 0.99:
+                    st.warning(
+                        "**Extreme prediction detected.** "
+                        "Please verify this is a valid mammogram image. "
+                        "Non-mammography images may produce misleading results."
+                    )
 
 
 def finetune_tab():
