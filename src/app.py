@@ -1,28 +1,26 @@
 """Streamlit web interface for mammogram classification and fine-tuning."""
 
-import random
-import sys
-import tempfile
 import time
-from dataclasses import dataclass, field
-from enum import Enum
 from pathlib import Path
 
-import mlx.core as mx
-import mlx.nn as nn
-import mlx.optimizers as optim
 import numpy as np
-import pydicom
 import streamlit as st
 from PIL import Image
-from sklearn.metrics import roc_auc_score
 
-# Ensure mlx-image is in path.
-sys.path.insert(0, str(Path(__file__).parent.parent / "vendor" / "mlx-image" / "src"))
-from mlxim.data import DataLoader
-from mlxim.data._base import Dataset
-
-from src.models.whole_image_classifier import create_whole_image_classifier
+from src.app.types import Classification
+from src.app.utils import (
+    MODEL_DESCRIPTIONS,
+    FolderDataset,
+    evaluate_model,
+    get_confidence_description,
+    get_model_display_info,
+    load_dicom,
+    load_model,
+    run_finetuning,
+    run_inference,
+    stratified_train_val_split,
+    validate_training_folder,
+)
 from src.transforms import (
     DEFAULT_HEIGHT,
     DEFAULT_WIDTH,
@@ -33,7 +31,6 @@ from src.transforms import (
 
 DEFAULT_WEIGHTS = "checkpoints/default/cbis-whole-wd-only/best_model.safetensors"
 
-# Emoji prefixes for model selection UI
 VENDOR_MODEL_PREFIX = "📦 "
 USER_MODEL_PREFIX = "👤 "
 
@@ -42,349 +39,6 @@ TRAINING_PRESETS = {
     "Standard": {"epochs": 15, "stage1_epochs": 5},
     "Thorough": {"epochs": 30, "stage1_epochs": 10},
 }
-
-# Model descriptions for UI display
-MODEL_DESCRIPTIONS = {
-    "cbis-whole-wd-only": {
-        "name": "CBIS-DDSM Base Model (Default)",
-        "description": (
-            "Trained on CBIS-DDSM dataset. "
-            "Use this as a starting point for fine-tuning."),
-        "is_default": True,
-        "vendor": True,
-    },
-    "cbis-whole-final": {
-        "name": "CBIS-DDSM Final",
-        "description": (
-            "Trained on CBIS-DDSM train+val set. "
-            "Slightly higher AUC but used test-set selection."),
-        "is_default": False,
-        "vendor": True,
-    },
-    "inbreast-whole-finetune": {
-        "name": "INbreast Fine-tuned",
-        "description": "Fine-tuned on INbreast dataset (Portuguese FFDM).",
-        "is_default": False,
-        "vendor": True,
-    },
-    "vindr-whole-finetune": {
-        "name": "VinDr Fine-tuned",
-        "description": "Fine-tuned on VinDr-Mammo dataset (Vietnamese hospitals).",
-        "is_default": False,
-        "vendor": True,
-    },
-}
-
-
-@dataclass
-class FolderValidationResult:
-    """Result of validating a training/test data folder."""
-
-    error: str | None = None
-    benign: int = 0
-    malignant: int = 0
-    total: int = 0
-    benign_files: list[Path] = field(default_factory=list)
-    malignant_files: list[Path] = field(default_factory=list)
-
-
-@dataclass
-class ModelInfo:
-    """Display information for a model."""
-
-    name: str
-    description: str
-    is_vendor: bool
-
-
-class Classification(Enum):
-    """Binary classification result."""
-
-    BENIGN = "Benign"
-    MALIGNANT = "Malignant"
-
-
-@dataclass
-class InferenceResult:
-    """Result of running inference on a single image."""
-
-    malignant_prob: float
-    classification: Classification
-
-
-@dataclass
-class EvaluationMetrics:
-    """Metrics from evaluating a model on a dataset."""
-
-    auc: float
-    sensitivity: float
-    specificity: float
-    accuracy: float
-    n_samples: int
-    n_malignant: int
-    n_benign: int
-
-
-@dataclass
-class TrainValSplit:
-    """Result of splitting files into train/val sets."""
-
-    train_benign: list[Path]
-    train_malignant: list[Path]
-    val_benign: list[Path]
-    val_malignant: list[Path]
-
-
-def get_model_display_info(weights_path: str) -> ModelInfo:
-    """Get display name and description for a model."""
-    model_name = Path(weights_path).parent.name
-    if model_name in MODEL_DESCRIPTIONS:
-        info = MODEL_DESCRIPTIONS[model_name]
-        return ModelInfo(
-            name=info["name"],
-            description=info["description"],
-            is_vendor=info.get("vendor", False),
-        )
-    else:
-        # User-trained model
-        return ModelInfo(name=model_name, description="User fine-tuned model", is_vendor=False)
-
-
-def load_model(weights_path):
-    model = create_whole_image_classifier(
-        patch_weights_path=None,
-        backbone_name="resnet50",
-        num_classes=2
-    )
-    if weights_path and Path(weights_path).exists():
-        model.load_weights(weights_path)
-    model.eval()
-    return model
-
-
-def load_dicom(file_bytes):
-    with tempfile.NamedTemporaryFile(suffix=".dcm", delete=False) as tmp:
-        tmp.write(file_bytes)
-        tmp_path = tmp.name
-    dcm = pydicom.dcmread(tmp_path)
-    pixel_array = dcm.pixel_array
-    if pixel_array.dtype != np.uint8:
-        pixel_array = ((pixel_array - pixel_array.min()) /
-                       (pixel_array.max() - pixel_array.min()) * 255).astype(np.uint8)
-    if len(pixel_array.shape) == 2:
-        pixel_array = np.stack([pixel_array] * 3, axis=-1)
-    Path(tmp_path).unlink()
-    return pixel_array
-
-
-def run_inference(model, img) -> InferenceResult:
-    """Run inference on a single preprocessed image."""
-    inputs = mx.expand_dims(img, 0)
-    logits = model(inputs)
-    probs = mx.softmax(logits, axis=1)
-    mx.eval(probs)
-    malignant_prob = probs[0, 1].item()
-    classification = Classification.MALIGNANT if malignant_prob >= 0.5 else Classification.BENIGN
-    return InferenceResult(malignant_prob=malignant_prob, classification=classification)
-
-
-def get_confidence_description(malignant_prob):
-    """Get a textual description of model confidence."""
-    # Confidence is distance from decision boundary, scaled to 0-1
-    confidence = abs(malignant_prob - 0.5) * 2
-
-    if confidence >= 0.8:
-        level = "Very high"
-        explanation = "The model is very certain about this prediction."
-    elif confidence >= 0.5:
-        level = "High"
-        explanation = "The model is fairly certain about this prediction."
-    elif confidence >= 0.2:
-        level = "Moderate"
-        explanation = "The model shows reasonable certainty."
-    else:
-        level = "Low"
-        explanation = "The model has low confidence. Consider additional review."
-
-    return level, explanation
-
-
-def validate_training_folder(folder_path: str) -> FolderValidationResult:
-    """Validate a training/test folder and return stats or error."""
-    folder = Path(folder_path)
-    if not folder.exists():
-        return FolderValidationResult(error="Folder does not exist")
-
-    benign_folder = folder / "benign"
-    malignant_folder = folder / "malignant"
-
-    if not benign_folder.exists() or not malignant_folder.exists():
-        return FolderValidationResult(
-            error="Folder must contain 'benign/' and 'malignant/' subfolders"
-        )
-
-    image_extensions = {'.png', '.jpg', '.jpeg', '.dcm', '.dicom'}
-    benign_images = [
-        f for f in benign_folder.iterdir() if f.suffix.lower() in image_extensions
-    ]
-    malignant_images = [
-        f for f in malignant_folder.iterdir() if f.suffix.lower() in image_extensions
-    ]
-
-    if len(benign_images) == 0 or len(malignant_images) == 0:
-        return FolderValidationResult(error="Both folders must contain at least one image")
-
-    return FolderValidationResult(
-        benign=len(benign_images),
-        malignant=len(malignant_images),
-        total=len(benign_images) + len(malignant_images),
-        benign_files=benign_images,
-        malignant_files=malignant_images,
-    )
-
-
-def stratified_train_val_split(
-    benign_files: list[Path],
-    malignant_files: list[Path],
-    val_fraction: float = 0.2,
-) -> TrainValSplit:
-    """Split files into train/val sets, maintaining class balance."""
-    random.shuffle(benign_files)
-    random.shuffle(malignant_files)
-
-    n_benign_val = max(1, int(len(benign_files) * val_fraction))
-    n_malignant_val = max(1, int(len(malignant_files) * val_fraction))
-
-    return TrainValSplit(
-        train_benign=benign_files[n_benign_val:],
-        train_malignant=malignant_files[n_malignant_val:],
-        val_benign=benign_files[:n_benign_val],
-        val_malignant=malignant_files[:n_malignant_val],
-    )
-
-
-def evaluate_model(model, dataset) -> EvaluationMetrics:
-    """Evaluate model on a dataset, returning AUC, sensitivity, specificity."""
-    model.eval()
-    loader = DataLoader(dataset, batch_size=2, shuffle=False, num_workers=0)
-
-    all_probs = []
-    all_labels = []
-
-    for inputs, targets in loader:
-        logits = model(inputs)
-        probs = mx.softmax(logits, axis=1)
-        mx.eval(probs)
-
-        all_probs.extend(probs[:, 1].tolist())
-        all_labels.extend(targets.tolist())
-
-    all_probs = np.array(all_probs)
-    all_labels = np.array(all_labels)
-
-    # AUC (0.5 fallback when single class present)
-    auc = 0.5 if len(np.unique(all_labels)) < 2 else roc_auc_score(all_labels, all_probs)
-
-    # Sensitivity and specificity at threshold 0.5
-    preds = (all_probs >= 0.5).astype(int)
-    tp = np.sum((preds == 1) & (all_labels == 1))
-    tn = np.sum((preds == 0) & (all_labels == 0))
-    fp = np.sum((preds == 1) & (all_labels == 0))
-    fn = np.sum((preds == 0) & (all_labels == 1))
-
-    sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-    specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
-    accuracy = (tp + tn) / len(all_labels) if len(all_labels) > 0 else 0.0
-
-    return EvaluationMetrics(
-        auc=float(auc),
-        sensitivity=float(sensitivity),
-        specificity=float(specificity),
-        accuracy=float(accuracy),
-        n_samples=len(all_labels),
-        n_malignant=int(np.sum(all_labels)),
-        n_benign=int(np.sum(all_labels == 0)),
-    )
-
-
-class FolderDataset(Dataset):
-    def __init__(self, benign_files, malignant_files, transform=None):
-        self.transform = transform
-        self.samples = []
-        for f in benign_files:
-            self.samples.append((str(f), 0))
-        for f in malignant_files:
-            self.samples.append((str(f), 1))
-
-    def __len__(self):
-        return len(self.samples)
-
-    def __getitem__(self, idx):
-        filepath, label = self.samples[idx]
-
-        if filepath.lower().endswith(('.dcm', '.dicom')):
-            dcm = pydicom.dcmread(filepath)
-            img = dcm.pixel_array
-            if img.dtype != np.uint8:
-                img = ((img - img.min()) / (img.max() - img.min()) * 255).astype(np.uint8)
-            if len(img.shape) == 2:
-                img = np.stack([img] * 3, axis=-1)
-        else:
-            img = Image.open(filepath).convert('RGB')
-            img = np.array(img).astype(np.uint8)
-
-        if self.transform:
-            img = self.transform(image=img)['image']
-
-        img = img.astype(np.float32) / 255.0
-        return mx.array(img), mx.array(label)
-
-
-def run_finetuning(model, dataset, epochs, stage1_epochs, progress_callback):
-    model.freeze_backbone()
-    optimizer = optim.AdamW(learning_rate=1e-4, weight_decay=0.001)
-
-    loader = DataLoader(dataset, batch_size=2, shuffle=True, num_workers=0)
-    total_batches = len(loader) * epochs
-    current_batch = 0
-
-    def loss_fn(model, inputs, targets):
-        logits = model(inputs)
-        return mx.mean(nn.losses.cross_entropy(logits, targets))
-
-    for epoch in range(epochs):
-        if epoch == stage1_epochs:
-            model.unfreeze_all()
-            optimizer = optim.AdamW(learning_rate=1e-5, weight_decay=0.01)
-
-        model.train()
-        epoch_loss = 0.0
-        epoch_correct = 0
-        epoch_samples = 0
-
-        for inputs, targets in loader:
-            loss_and_grad_fn = nn.value_and_grad(model, loss_fn)
-            loss, grads = loss_and_grad_fn(model, inputs, targets)
-            optimizer.update(model, grads)
-            mx.eval(model.parameters(), optimizer.state)
-
-            logits = model(inputs)
-            preds = mx.argmax(logits, axis=1)
-            correct = mx.sum(preds == targets).item()
-
-            batch_size = len(targets)
-            epoch_loss += loss.item() * batch_size
-            epoch_correct += correct
-            epoch_samples += batch_size
-            current_batch += 1
-
-            progress = current_batch / total_batches
-            stage = "Stage 1 (head only)" if epoch < stage1_epochs else "Stage 2 (full model)"
-            acc = epoch_correct / epoch_samples if epoch_samples > 0 else 0
-            progress_callback(progress, epoch + 1, epochs, stage, epoch_loss / epoch_samples, acc)
-
-    model.eval()
-    return model
 
 
 def inference_tab():
@@ -425,7 +79,7 @@ def inference_tab():
                 test_dataset = FolderDataset(
                     test_stats.benign_files,
                     test_stats.malignant_files,
-                    transform
+                    transform,
                 )
                 metrics = evaluate_model(model, test_dataset)
 
@@ -482,17 +136,17 @@ def inference_tab():
     uploaded_file = st.file_uploader(
         "Upload mammogram",
         type=["png", "jpg", "jpeg", "dcm", "dicom"],
-        help="Supported formats: PNG, JPEG, DICOM"
+        help="Supported formats: PNG, JPEG, DICOM",
     )
 
     if uploaded_file is not None:
-        file_ext = uploaded_file.name.lower().split('.')[-1]
+        file_ext = uploaded_file.name.lower().split(".")[-1]
 
         with st.spinner("Processing image..."):
             if file_ext in ["dcm", "dicom"]:
                 img_array = load_dicom(uploaded_file.read())
             else:
-                img = Image.open(uploaded_file).convert('RGB')
+                img = Image.open(uploaded_file).convert("RGB")
                 img_array = np.array(img).astype(np.uint8)
 
             col1, col2 = st.columns(2)
@@ -560,19 +214,19 @@ def finetune_tab():
         "Training duration",
         options=list(TRAINING_PRESETS.keys()),
         index=1,
-        help="Longer training generally produces better results"
+        help="Longer training generally produces better results",
     )
 
     base_weights = st.text_input(
         "Base model weights",
         value=DEFAULT_WEIGHTS,
-        help="Pre-trained weights to fine-tune from"
+        help="Pre-trained weights to fine-tune from",
     )
 
     output_name = st.text_input(
         "Output model name",
         value="my-finetuned-model",
-        help="Name for the fine-tuned model"
+        help="Name for the fine-tuned model",
     )
 
     if st.button("Start Fine-tuning", type="primary", use_container_width=True):
@@ -627,10 +281,11 @@ def finetune_tab():
                 cols[3].metric("Remaining", remaining_str)
 
         model = run_finetuning(
-            model, train_dataset,
+            model,
+            train_dataset,
             epochs=preset_config["epochs"],
             stage1_epochs=preset_config["stage1_epochs"],
-            progress_callback=update_progress
+            progress_callback=update_progress,
         )
 
         # Save model
@@ -675,7 +330,8 @@ def finetune_tab():
 
         if auc >= 0.80:
             st.success(
-                "**Good results.** The fine-tuned model shows strong performance on your data.")
+                "**Good results.** The fine-tuned model shows strong performance on your data."
+            )
             st.markdown("""
             The model is ready for use. You can now:
             - Switch to this model in the Project Overview tab
@@ -690,7 +346,7 @@ def finetune_tab():
             - Ensure consistent image quality across your dataset
             """)
         elif auc >= 0.60:
-            cases_to_add = 'malignant' if stats.malignant < stats.benign else 'benign'
+            cases_to_add = "malignant" if stats.malignant < stats.benign else "benign"
             st.warning("**Suboptimal results.** Performance is below typical clinical thresholds.")
             st.markdown(f"""
             **Possible causes:**
@@ -774,13 +430,14 @@ def project_overview_tab():
 
         help_text = (
             f"{VENDOR_MODEL_PREFIX}= Vendor-provided model, "
-            f"{USER_MODEL_PREFIX}= User fine-tuned model")
+            f"{USER_MODEL_PREFIX}= User fine-tuned model"
+        )
         selected_index = st.selectbox(
             "Select model",
             options=range(len(model_options)),
             format_func=lambda i: model_options[i],
             index=current_index,
-            help=help_text
+            help=help_text,
         )
 
         selected_path = available_models[selected_index]
@@ -822,7 +479,7 @@ def project_overview_tab():
             "Training data folder",
             value=st.session_state.get("train_folder", ""),
             placeholder="/path/to/train_data",
-            help="Folder with benign/ and malignant/ subfolders for fine-tuning"
+            help="Folder with benign/ and malignant/ subfolders for fine-tuning",
         )
         if train_folder:
             result = validate_training_folder(train_folder)
@@ -842,7 +499,7 @@ def project_overview_tab():
             "Test data folder",
             value=st.session_state.get("test_folder", ""),
             placeholder="/path/to/test_data",
-            help="Folder with benign/ and malignant/ subfolders for evaluation"
+            help="Folder with benign/ and malignant/ subfolders for evaluation",
         )
         if test_folder:
             result = validate_training_folder(test_folder)
@@ -874,11 +531,7 @@ def project_overview_tab():
 
 
 def main():
-    st.set_page_config(
-        page_title="Mammogram Classifier",
-        page_icon="🩺",
-        layout="centered"
-    )
+    st.set_page_config(page_title="Mammogram Classifier", page_icon="🩺", layout="centered")
 
     # Load custom CSS for accessibility fixes
     css_file = Path(__file__).parent.parent / ".streamlit" / "style.css"
