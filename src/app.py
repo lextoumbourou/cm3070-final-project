@@ -2,6 +2,7 @@
 
 import sys
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import albumentations as A
@@ -67,6 +68,18 @@ MODEL_DESCRIPTIONS = {
         "vendor": True,
     },
 }
+
+
+@dataclass
+class FolderValidationResult:
+    """Result of validating a training/test data folder."""
+
+    error: str | None = None
+    benign: int = 0
+    malignant: int = 0
+    total: int = 0
+    benign_files: list[Path] = field(default_factory=list)
+    malignant_files: list[Path] = field(default_factory=list)
 
 
 def get_model_display_info(weights_path):
@@ -159,16 +172,19 @@ def get_confidence_description(malignant_prob):
     return level, explanation
 
 
-def validate_training_folder(folder_path):
+def validate_training_folder(folder_path: str) -> FolderValidationResult:
+    """Validate a training/test folder and return stats or error."""
     folder = Path(folder_path)
     if not folder.exists():
-        return None, "Folder does not exist"
+        return FolderValidationResult(error="Folder does not exist")
 
     benign_folder = folder / "benign"
     malignant_folder = folder / "malignant"
 
     if not benign_folder.exists() or not malignant_folder.exists():
-        return None, "Folder must contain 'benign/' and 'malignant/' subfolders"
+        return FolderValidationResult(
+            error="Folder must contain 'benign/' and 'malignant/' subfolders"
+        )
 
     image_extensions = {'.png', '.jpg', '.jpeg', '.dcm', '.dicom'}
     benign_images = [
@@ -179,15 +195,15 @@ def validate_training_folder(folder_path):
     ]
 
     if len(benign_images) == 0 or len(malignant_images) == 0:
-        return None, "Both folders must contain at least one image"
+        return FolderValidationResult(error="Both folders must contain at least one image")
 
-    return {
-        "benign": len(benign_images),
-        "malignant": len(malignant_images),
-        "total": len(benign_images) + len(malignant_images),
-        "benign_files": benign_images,
-        "malignant_files": malignant_images
-    }, None
+    return FolderValidationResult(
+        benign=len(benign_images),
+        malignant=len(malignant_images),
+        total=len(benign_images) + len(malignant_images),
+        benign_files=benign_images,
+        malignant_files=malignant_images,
+    )
 
 
 def stratified_train_val_split(benign_files, malignant_files, val_fraction=0.2):
@@ -360,15 +376,15 @@ def inference_tab():
 
         col1, col2 = st.columns([3, 1])
         with col1:
-            st.markdown(f"Test folder: `{test_folder}` ({test_stats['total']} images)")
+            st.markdown(f"Test folder: `{test_folder}` ({test_stats.total} images)")
         with col2:
             run_batch = st.button("Run Evaluation", type="primary", use_container_width=True)
 
         if run_batch:
             with st.spinner("Running inference on test dataset..."):
                 test_dataset = FolderDataset(
-                    test_stats["benign_files"],
-                    test_stats["malignant_files"],
+                    test_stats.benign_files,
+                    test_stats.malignant_files,
                     transform
                 )
                 metrics = evaluate_model(model, test_dataset)
@@ -489,11 +505,11 @@ def finetune_tab():
     st.markdown(f"**Training folder:** `{folder_path}`")
 
     col1, col2, col3 = st.columns(3)
-    col1.metric("Benign", stats["benign"])
-    col2.metric("Malignant", stats["malignant"])
-    col3.metric("Total", stats["total"])
+    col1.metric("Benign", stats.benign)
+    col2.metric("Malignant", stats.malignant)
+    col3.metric("Total", stats.total)
 
-    if stats["total"] < 10:
+    if stats.total < 10:
         st.warning("Consider adding more images for better fine-tuning results (recommended: 50+)")
 
     st.divider()
@@ -532,8 +548,8 @@ def finetune_tab():
             model = load_model(base_weights)
 
             # Stratified train/val split (80/20)
-            benign_files = list(stats["benign_files"])
-            malignant_files = list(stats["malignant_files"])
+            benign_files = list(stats.benign_files)
+            malignant_files = list(stats.malignant_files)
             train_benign, train_malignant, val_benign, val_malignant = \
                 stratified_train_val_split(benign_files, malignant_files, val_fraction=0.2)
 
@@ -630,12 +646,12 @@ def finetune_tab():
             - Ensure consistent image quality across your dataset
             """)
         elif auc >= 0.60:
-            cases_to_add = 'malignant' if stats['malignant'] < stats['benign'] else 'benign'
+            cases_to_add = 'malignant' if stats.malignant < stats.benign else 'benign'
             st.warning("**Suboptimal results.** Performance is below typical clinical thresholds.")
             st.markdown(f"""
             **Possible causes:**
-            - Too few training images (current: {stats['total']}, recommended: 50+)
-            - Class imbalance (benign: {stats['benign']}, malignant: {stats['malignant']})
+            - Too few training images (current: {stats.total}, recommended: 50+)
+            - Class imbalance (benign: {stats.benign}, malignant: {stats.malignant})
             - Inconsistent image quality or labelling errors
 
             **Recommendations:**
@@ -647,7 +663,7 @@ def finetune_tab():
             st.error("**Poor results.** The model is performing near random chance.")
             st.markdown(f"""
             **This may indicate:**
-            - Insufficient training data (current: {stats['total']} images)
+            - Insufficient training data (current: {stats.total} images)
             - Severe class imbalance
             - Data quality issues or labelling errors
             - The base model may not be suitable for your imaging equipment
@@ -767,16 +783,17 @@ def project_overview_tab():
             help="Folder with benign/ and malignant/ subfolders for fine-tuning"
         )
         if train_folder:
-            stats, error = validate_training_folder(train_folder)
-            if error:
-                st.error(error)
+            result = validate_training_folder(train_folder)
+            if result.error:
+                st.error(result.error)
             else:
                 image_count = (
-                    f"✓ {stats['total']} images ({stats['benign']} benign, "
-                    "{stats['malignant']} malignant)")
+                    f"✓ {result.total} images ({result.benign} benign, "
+                    f"{result.malignant} malignant)"
+                )
                 st.success(image_count)
                 st.session_state.train_folder = train_folder
-                st.session_state.train_stats = stats
+                st.session_state.train_stats = result
 
     with col2:
         test_folder = st.text_input(
@@ -786,16 +803,17 @@ def project_overview_tab():
             help="Folder with benign/ and malignant/ subfolders for evaluation"
         )
         if test_folder:
-            stats, error = validate_training_folder(test_folder)
-            if error:
-                st.error(error)
+            result = validate_training_folder(test_folder)
+            if result.error:
+                st.error(result.error)
             else:
                 success_message = (
-                    f"✓ {stats['total']} images ({stats['benign']} benign, "
-                    "{stats['malignant']} malignant)")
+                    f"✓ {result.total} images ({result.benign} benign, "
+                    f"{result.malignant} malignant)"
+                )
                 st.success(success_message)
                 st.session_state.test_folder = test_folder
-                st.session_state.test_stats = stats
+                st.session_state.test_stats = result
 
     st.divider()
 
