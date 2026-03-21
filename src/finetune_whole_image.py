@@ -120,7 +120,10 @@ class FineTuner:
         avg_loss = total_loss / total_samples
         avg_acc = total_correct / total_samples
         throughput = total_samples / epoch_time
-        return {"loss": avg_loss, "accuracy": avg_acc, "epoch_time": epoch_time, "throughput": throughput}
+        return {
+            "loss": avg_loss, "accuracy": avg_acc,
+            "epoch_time": epoch_time, "throughput": throughput
+        }
 
     def validate(self, val_loader):
         self.model.eval()
@@ -152,7 +155,7 @@ class FineTuner:
         try:
             from sklearn.metrics import roc_auc_score
             auc = roc_auc_score(all_targets, all_probs)
-        except:
+        except Exception:
             auc = 0.0
 
         return {
@@ -178,15 +181,20 @@ class FineTuner:
             if unfreeze_epoch is not None and epoch == unfreeze_epoch:
                 print(f"\n>>> Unfreezing backbone, LR={unfreeze_lr}, WD={unfreeze_wd}")
                 self.model.unfreeze_all()
-                self.optimizer = optim.AdamW(learning_rate=unfreeze_lr, weight_decay=unfreeze_wd or 0.0)
+                wd = unfreeze_wd or 0.0
+                self.optimizer = optim.AdamW(learning_rate=unfreeze_lr, weight_decay=wd)
 
             train_metrics = self.train_epoch(train_loader, epoch)
             epoch_times.append(train_metrics['epoch_time'])
-            print(f"Training - Loss: {train_metrics['loss']:.4f}, Acc: {train_metrics['accuracy']:.4f}")
-            print(f"  Epoch time: {train_metrics['epoch_time']:.1f}s, Throughput: {train_metrics['throughput']:.2f} img/s")
+            loss, acc = train_metrics['loss'], train_metrics['accuracy']
+            print(f"Training - Loss: {loss:.4f}, Acc: {acc:.4f}")
+            t, tp = train_metrics['epoch_time'], train_metrics['throughput']
+            print(f"  Epoch time: {t:.1f}s, Throughput: {tp:.2f} img/s")
 
             val_metrics = self.validate(val_loader)
-            print(f"Validation - Loss: {val_metrics['val_loss']:.4f}, Acc: {val_metrics['val_accuracy']:.4f}, AUC: {val_metrics['val_auc']:.4f}")
+            v_loss = val_metrics['val_loss']
+            v_acc, v_auc = val_metrics['val_accuracy'], val_metrics['val_auc']
+            print(f"Validation - Loss: {v_loss:.4f}, Acc: {v_acc:.4f}, AUC: {v_auc:.4f}")
 
             lr = self.optimizer.learning_rate
             if hasattr(lr, 'item'):
@@ -222,7 +230,7 @@ def main():
     parser = argparse.ArgumentParser(description="Fine-tune whole image classifier on new dataset")
     parser.add_argument("--run-name", type=str, required=True)
     parser.add_argument("--data-dir", type=str, required=True)
-    parser.add_argument("--weights", type=str, required=True, help="Pre-trained whole image weights")
+    parser.add_argument("--weights", type=str, required=True, help="Pre-trained weights")
     parser.add_argument("--backbone", type=str, default="resnet50")
     parser.add_argument("--batch-size", type=int, default=2)
     parser.add_argument("--epochs", type=int, default=20)
@@ -276,8 +284,9 @@ def main():
     n_malignant = sum(1 for label in train_labels if label == 1)
     print(f"Training distribution: Benign={n_benign}, Malignant={n_malignant}")
 
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
-    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
+    batch_size = args.batch_size
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
 
     print("\nCreating whole image classifier...")
     model = create_whole_image_classifier(

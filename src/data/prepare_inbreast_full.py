@@ -80,7 +80,8 @@ def get_contours_from_mask(mask):
 
 def crop_coords(img_array):
     if img_array.max() > 255:
-        img_array = ((img_array - img_array.min()) / (img_array.max() - img_array.min()) * 255).astype(np.uint8)
+        img_array = (img_array - img_array.min()) / (img_array.max() - img_array.min())
+        img_array = (img_array * 255).astype(np.uint8)
     blur = cv2.GaussianBlur(img_array, (5, 5), 0)
     _, breast_mask = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     morph_img = apply_morphological_transforms(breast_mask)
@@ -104,7 +105,8 @@ def clahe(img, clip):
 
 def preprocess_mammogram(img_array, target_size=TARGET_SIZE):
     if img_array.max() > 255:
-        img_array = ((img_array - img_array.min()) / (img_array.max() - img_array.min()) * 255).astype(np.uint8)
+        img_array = (img_array - img_array.min()) / (img_array.max() - img_array.min())
+        img_array = (img_array * 255).astype(np.uint8)
 
     x, y, w, h = crop_coords(img_array)
     img_cropped = img_array[y:y+h, x:x+w]

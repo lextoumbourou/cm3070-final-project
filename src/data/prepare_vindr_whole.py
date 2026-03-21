@@ -133,7 +133,9 @@ def main():
         benign_sampled = benign.sample(n=n_minority, random_state=42)
         malignant_sampled = malignant.sample(n=n_minority, random_state=42)
         balanced = pd.concat([benign_sampled, malignant_sampled])
-        logger.info(f"  {name}: {len(split_df)} → {len(balanced)} (balanced to {n_minority} per class)")
+        logger.info(
+            f"  {name}: {len(split_df)} → {len(balanced)} (balanced to {n_minority} per class)"
+        )
         return balanced.sample(frac=1, random_state=42).reset_index(drop=True)
 
     if args.balance:

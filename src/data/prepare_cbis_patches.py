@@ -191,7 +191,6 @@ def extract_roi_patches(
         cx = (roi_x_min + roi_x_max) // 2
         cy = (roi_y_min + roi_y_max) // 2
 
-    roi_pixel_count = np.sum(mask > 0)
     half_patch = patch_size // 2
 
     # Calculate jitter range based on ROI size - include surrounding context
@@ -249,7 +248,8 @@ def extract_roi_patches(
 
         # Accept patch if it has any ROI content (at least 10% of patch)
         if best_patch is not None and best_overlap >= 0.1:
-            px, py, x1_valid, y1_valid, x2_valid, y2_valid, pad_left, pad_top, pad_right, pad_bottom = best_patch
+            (px, py, x1_valid, y1_valid, x2_valid, y2_valid,
+             pad_left, pad_top, pad_right, pad_bottom) = best_patch
             extracted_centers.add((px, py))
 
             patch = full_image[y1_valid:y2_valid, x1_valid:x2_valid]

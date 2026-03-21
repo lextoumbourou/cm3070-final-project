@@ -154,7 +154,9 @@ def process_and_save_split(
     current_idx = start_idx
 
     for _, row in tqdm(split_df.iterrows(), total=len(split_df), desc=f"Processing {split_name}"):
-        metadata = process_case(row, img_output_dir, current_idx, target_width, target_height, crop_breast)
+        metadata = process_case(
+            row, img_output_dir, current_idx, target_width, target_height, crop_breast
+        )
         if metadata is not None:
             processed_cases.append(metadata)
             current_idx += 1
@@ -168,7 +170,8 @@ def process_and_save_split(
     if len(metadata_df) > 0:
         n_malignant = (metadata_df['label'] == 1).sum()
         n_benign = (metadata_df['label'] == 0).sum()
-        logger.info(f"{split_name} - Total: {len(metadata_df)}, Benign: {n_benign}, Malignant: {n_malignant}")
+        total = len(metadata_df)
+        logger.info(f"{split_name} - Total: {total}, Benign: {n_benign}, Malignant: {n_malignant}")
 
     return metadata_df, current_idx
 
@@ -185,10 +188,7 @@ def main():
 
     args = parser.parse_args()
 
-    if args.output_dir:
-        output_root = Path(args.output_dir)
-    else:
-        output_root = OUTPUT_ROOT
+    output_root = Path(args.output_dir) if args.output_dir else OUTPUT_ROOT
     img_output_dir = output_root / "img"
 
     logger.info("Starting INbreast whole mammogram dataset preparation...")

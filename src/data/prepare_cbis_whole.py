@@ -280,7 +280,8 @@ def process_and_save_split(
         n_malignant = (result_df["label"] == 1).sum()
         n_benign = (result_df["label"] == 0).sum()
         logger.info(f"{split_name} - Total images: {len(result_df)}")
-        logger.info(f"{split_name} - Malignant: {n_malignant} ({100*n_malignant/len(result_df):.1f}%)")
+        percent = 100 * n_malignant / len(result_df)
+        logger.info(f"{split_name} - Malignant: {n_malignant} ({percent:.1f}%)")
         logger.info(f"{split_name} - Benign: {n_benign} ({100*n_benign/len(result_df):.1f}%)")
 
     return result_df, current_idx
