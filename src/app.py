@@ -226,11 +226,8 @@ def evaluate_model(model, dataset):
     all_probs = np.array(all_probs)
     all_labels = np.array(all_labels)
 
-    # AUC
-    if len(np.unique(all_labels)) < 2:
-        auc = 0.5  # Can't compute AUC with single class
-    else:
-        auc = roc_auc_score(all_labels, all_probs)
+    # AUC (0.5 fallback when single class present)
+    auc = 0.5 if len(np.unique(all_labels)) < 2 else roc_auc_score(all_labels, all_probs)
 
     # Sensitivity and specificity at threshold 0.5
     preds = (all_probs >= 0.5).astype(int)
@@ -608,15 +605,17 @@ def finetune_tab():
             st.metric("Sensitivity", f"{val_metrics['sensitivity']:.1%}")
             st.metric("Specificity", f"{val_metrics['specificity']:.1%}")
 
-        st.caption(f"Validated on {val_metrics['n_samples']} images "
-                  f"({val_metrics['n_malignant']} malignant, {val_metrics['n_benign']} benign)")
+        st.caption(
+            f"Validated on {val_metrics['n_samples']} images "
+            f"({val_metrics['n_malignant']} malignant, {val_metrics['n_benign']} benign)")
 
         # Result interpretation and guidance
         st.divider()
         auc = val_metrics['auc']
 
         if auc >= 0.80:
-            st.success("**Good results.** The fine-tuned model shows strong performance on your data.")
+            st.success(
+                "**Good results.** The fine-tuned model shows strong performance on your data.")
             st.markdown("""
             The model is ready for use. You can now:
             - Switch to this model in the Project Overview tab
@@ -631,6 +630,7 @@ def finetune_tab():
             - Ensure consistent image quality across your dataset
             """)
         elif auc >= 0.60:
+            cases_to_add = 'malignant' if stats['malignant'] < stats['benign'] else 'benign'
             st.warning("**Suboptimal results.** Performance is below typical clinical thresholds.")
             st.markdown(f"""
             **Possible causes:**
@@ -639,7 +639,7 @@ def finetune_tab():
             - Inconsistent image quality or labelling errors
 
             **Recommendations:**
-            - Add more labelled images, especially {'malignant' if stats['malignant'] < stats['benign'] else 'benign'} cases
+            - Add more labelled images, especially {cases_to_add} cases
             - Try the **Thorough** preset
             - Review your labels for accuracy
             """)
@@ -700,7 +700,7 @@ def project_overview_tab():
                             (weights_path, display_name, description, is_vendor, is_default)
                         )
 
-        # Sort default model first, then other vendor models, then user models (alphabetically within groups)
+        # Sort default model, then vendor models, then user models (alphabetically within groups)
         all_models.sort(key=lambda x: (not x[4], not x[3], x[1].lower()))
 
         for weights_path, display_name, _description, is_vendor, _is_default in all_models:
@@ -714,12 +714,15 @@ def project_overview_tab():
         if current_weights in available_models:
             current_index = available_models.index(current_weights)
 
+        help_text = (
+            f"{VENDOR_MODEL_PREFIX}= Vendor-provided model, "
+            f"{USER_MODEL_PREFIX}= User fine-tuned model")
         selected_index = st.selectbox(
             "Select model",
             options=range(len(model_options)),
             format_func=lambda i: model_options[i],
             index=current_index,
-            help=f"{VENDOR_MODEL_PREFIX}= Vendor-provided model, {USER_MODEL_PREFIX}= User fine-tuned model"
+            help=help_text
         )
 
         selected_path = available_models[selected_index]
@@ -740,7 +743,7 @@ def project_overview_tab():
     # Dataset Selection.
     st.subheader("2. Configure Datasets (Optional)")
     st.markdown("""
-    Set your training and test data folders here. These will be used for batch inference and fine-tuning.
+    Set your training and test data folders here for batch inference and fine-tuning.
 
     **Required folder structure:**
     ```
@@ -768,7 +771,10 @@ def project_overview_tab():
             if error:
                 st.error(error)
             else:
-                st.success(f"✓ {stats['total']} images ({stats['benign']} benign, {stats['malignant']} malignant)")
+                image_count = (
+                    f"✓ {stats['total']} images ({stats['benign']} benign, "
+                    "{stats['malignant']} malignant)")
+                st.success(image_count)
                 st.session_state.train_folder = train_folder
                 st.session_state.train_stats = stats
 
@@ -784,7 +790,10 @@ def project_overview_tab():
             if error:
                 st.error(error)
             else:
-                st.success(f"✓ {stats['total']} images ({stats['benign']} benign, {stats['malignant']} malignant)")
+                success_message = (
+                    f"✓ {stats['total']} images ({stats['benign']} benign, "
+                    "{stats['malignant']} malignant)")
+                st.success(success_message)
                 st.session_state.test_folder = test_folder
                 st.session_state.test_stats = stats
 
