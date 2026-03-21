@@ -1,5 +1,6 @@
 """Streamlit web interface for mammogram classification and fine-tuning."""
 
+import random
 import sys
 import tempfile
 import time
@@ -124,6 +125,16 @@ class EvaluationMetrics:
     n_benign: int
 
 
+@dataclass
+class TrainValSplit:
+    """Result of splitting files into train/val sets."""
+
+    train_benign: list[Path]
+    train_malignant: list[Path]
+    val_benign: list[Path]
+    val_malignant: list[Path]
+
+
 def get_model_display_info(weights_path: str) -> ModelInfo:
     """Get display name and description for a model."""
     model_name = Path(weights_path).parent.name
@@ -232,21 +243,24 @@ def validate_training_folder(folder_path: str) -> FolderValidationResult:
     )
 
 
-def stratified_train_val_split(benign_files, malignant_files, val_fraction=0.2):
+def stratified_train_val_split(
+    benign_files: list[Path],
+    malignant_files: list[Path],
+    val_fraction: float = 0.2,
+) -> TrainValSplit:
     """Split files into train/val sets, maintaining class balance."""
-    np.random.shuffle(benign_files)
-    np.random.shuffle(malignant_files)
+    random.shuffle(benign_files)
+    random.shuffle(malignant_files)
 
     n_benign_val = max(1, int(len(benign_files) * val_fraction))
     n_malignant_val = max(1, int(len(malignant_files) * val_fraction))
 
-    val_benign = benign_files[:n_benign_val]
-    train_benign = benign_files[n_benign_val:]
-
-    val_malignant = malignant_files[:n_malignant_val]
-    train_malignant = malignant_files[n_malignant_val:]
-
-    return train_benign, train_malignant, val_benign, val_malignant
+    return TrainValSplit(
+        train_benign=benign_files[n_benign_val:],
+        train_malignant=malignant_files[n_malignant_val:],
+        val_benign=benign_files[:n_benign_val],
+        val_malignant=malignant_files[:n_malignant_val],
+    )
 
 
 def evaluate_model(model, dataset) -> EvaluationMetrics:
@@ -283,10 +297,10 @@ def evaluate_model(model, dataset) -> EvaluationMetrics:
     accuracy = (tp + tn) / len(all_labels) if len(all_labels) > 0 else 0.0
 
     return EvaluationMetrics(
-        auc=auc,
-        sensitivity=sensitivity,
-        specificity=specificity,
-        accuracy=accuracy,
+        auc=float(auc),
+        sensitivity=float(sensitivity),
+        specificity=float(specificity),
+        accuracy=float(accuracy),
         n_samples=len(all_labels),
         n_malignant=int(np.sum(all_labels)),
         n_benign=int(np.sum(all_labels == 0)),
@@ -578,13 +592,14 @@ def finetune_tab():
             # Stratified train/val split (80/20)
             benign_files = list(stats.benign_files)
             malignant_files = list(stats.malignant_files)
-            train_benign, train_malignant, val_benign, val_malignant = \
-                stratified_train_val_split(benign_files, malignant_files, val_fraction=0.2)
+            split = stratified_train_val_split(benign_files, malignant_files, val_fraction=0.2)
 
             train_transform = get_train_transform()
             val_transform = get_inference_transform()
-            train_dataset = FolderDataset(train_benign, train_malignant, train_transform)
-            val_dataset = FolderDataset(val_benign, val_malignant, val_transform)
+            train_dataset = FolderDataset(
+                split.train_benign, split.train_malignant, train_transform
+            )
+            val_dataset = FolderDataset(split.val_benign, split.val_malignant, val_transform)
 
             n_train = len(train_dataset)
             n_val = len(val_dataset)
