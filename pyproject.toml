@@ -46,6 +46,7 @@ dev = [
     "pytest-cov>=6.0.0",
     "playwright>=1.58.0",
     "axe-playwright-python>=0.1.7",
+    "ruff>=0.15.7",
 ]
 
 [tool.pytest.ini_options]
@@ -62,3 +63,15 @@ exclude_lines = [
     "if __name__ == .__main__.:",
     "raise NotImplementedError",
 ]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+extend-exclude = ["notebooks"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = []
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
