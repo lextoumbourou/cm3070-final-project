@@ -82,15 +82,28 @@ class FolderValidationResult:
     malignant_files: list[Path] = field(default_factory=list)
 
 
-def get_model_display_info(weights_path):
+@dataclass
+class ModelInfo:
+    """Display information for a model."""
+
+    name: str
+    description: str
+    is_vendor: bool
+
+
+def get_model_display_info(weights_path: str) -> ModelInfo:
     """Get display name and description for a model."""
     model_name = Path(weights_path).parent.name
     if model_name in MODEL_DESCRIPTIONS:
         info = MODEL_DESCRIPTIONS[model_name]
-        return info["name"], info["description"], info.get("vendor", False)
+        return ModelInfo(
+            name=info["name"],
+            description=info["description"],
+            is_vendor=info.get("vendor", False),
+        )
     else:
         # User-trained model
-        return model_name, "User fine-tuned model", False
+        return ModelInfo(name=model_name, description="User fine-tuned model", is_vendor=False)
 
 
 def load_model(weights_path):
@@ -363,9 +376,9 @@ def inference_tab():
 
     model = st.session_state.model
     transform = get_transform()
-    display_name, _, _ = get_model_display_info(weights_path)
+    model_info = get_model_display_info(weights_path)
 
-    st.caption(f"Using model: **{display_name}**")
+    st.caption(f"Using model: **{model_info.name}**")
 
     # Batch Inference on Test Dataset.
     test_folder = st.session_state.get("test_folder", "")
@@ -394,7 +407,7 @@ def inference_tab():
                 st.session_state.batch_results = {}
             st.session_state.batch_results[weights_path] = {
                 "metrics": metrics,
-                "model_name": display_name,
+                "model_name": model_info.name,
             }
 
             st.success("Evaluation complete!")
@@ -709,20 +722,18 @@ def project_overview_tab():
                     weights_file = model_dir / "best_model.safetensors"
                     if weights_file.exists():
                         weights_path = str(weights_file)
-                        display_name, description, is_vendor = get_model_display_info(weights_path)
+                        model_info = get_model_display_info(weights_path)
                         model_name = model_dir.name
                         is_default = MODEL_DESCRIPTIONS.get(model_name, {}).get("is_default", False)
-                        all_models.append(
-                            (weights_path, display_name, description, is_vendor, is_default)
-                        )
+                        all_models.append((weights_path, model_info, is_default))
 
         # Sort default model, then vendor models, then user models (alphabetically within groups)
-        all_models.sort(key=lambda x: (not x[4], not x[3], x[1].lower()))
+        all_models.sort(key=lambda x: (not x[2], not x[1].is_vendor, x[1].name.lower()))
 
-        for weights_path, display_name, _description, is_vendor, _is_default in all_models:
+        for weights_path, model_info, _is_default in all_models:
             available_models.append(weights_path)
-            prefix = VENDOR_MODEL_PREFIX if is_vendor else USER_MODEL_PREFIX
-            model_options.append(f"{prefix}{display_name}")
+            prefix = VENDOR_MODEL_PREFIX if model_info.is_vendor else USER_MODEL_PREFIX
+            model_options.append(f"{prefix}{model_info.name}")
 
     if available_models:
         # Find current selection index
@@ -742,14 +753,14 @@ def project_overview_tab():
         )
 
         selected_path = available_models[selected_index]
-        display_name, description, _ = get_model_display_info(selected_path)
+        model_info = get_model_display_info(selected_path)
 
-        st.caption(f"*{description}*")
+        st.caption(f"*{model_info.description}*")
 
         if selected_path != current_weights and st.button("Load selected model", type="primary"):
             st.session_state.current_weights = selected_path
             st.session_state.pop("model", None)
-            st.success(f"Switched to: {display_name}")
+            st.success(f"Switched to: {model_info.name}")
             st.rerun()
     else:
         st.warning("No checkpoints found")
@@ -823,8 +834,8 @@ def project_overview_tab():
 
     with config_col1:
         st.markdown("**Model**")
-        display_name, _, _ = get_model_display_info(current_weights)
-        st.code(display_name)
+        model_info = get_model_display_info(current_weights)
+        st.code(model_info.name)
 
     with config_col2:
         st.markdown("**Settings**")
