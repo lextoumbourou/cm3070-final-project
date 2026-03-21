@@ -147,10 +147,9 @@ def compute_metrics(probs, labels, threshold=0.5):
     specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
     accuracy = (tp + tn) / (tp + tn + fp + fn)
 
-    try:
-        auc = roc_auc_score(labels, probs)
-    except ValueError:
-        auc = 0.0
+    if len(np.unique(labels)) < 2:
+        raise ValueError("AUC is undefined: labels must contain both classes.")
+    auc = roc_auc_score(labels, probs)
 
     return {
         'auc': auc,
