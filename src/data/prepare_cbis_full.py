@@ -145,10 +145,8 @@ def process_case(
         mode: "full" for full mammogram with breast extraction,
               "roi" for pre-cropped ROI abnormality images
     """
-    if mode == "full":
-        image_path_str = row["image file path"]
-    else:  # roi mode
-        image_path_str = row["cropped image file path"]
+    path_key = "image file path" if mode == "full" else "cropped image file path"
+    image_path_str = row[path_key]
 
     try:
         dcm_data = parse_dcm_path(image_path_str)
@@ -177,7 +175,10 @@ def process_case(
     pathology = row["pathology"]
     abnormality_id = row.get("abnormality id", 1)
 
-    filename = f"{case_idx:05d}_{patient_id}_{breast_side}_{image_view}_{abnormality_category}_{abnormality_id}_{pathology}.png"
+    filename = (
+        f"{case_idx:05d}_{patient_id}_{breast_side}_{image_view}_"
+        f"{abnormality_category}_{abnormality_id}_{pathology}.png"
+    )
     output_path = output_dir / filename
 
     cv2.imwrite(str(output_path), img_processed)
