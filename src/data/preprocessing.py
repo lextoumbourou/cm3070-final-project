@@ -1,7 +1,7 @@
 """Mammogram image preprocessing utilities."""
 
-import numpy as np
 import cv2
+import numpy as np
 
 
 def normalise_to_uint8(img: np.ndarray) -> np.ndarray:

@@ -6,14 +6,14 @@ Outputs format compatible with inference_whole_image.py and finetune_whole_image
 - datasets/prep/vindr-whole/train.csv, val.csv, test.csv
 """
 
-from pathlib import Path
 import argparse
 import logging
+from pathlib import Path
 
-import pandas as pd
-import numpy as np
-from PIL import Image
 import cv2
+import numpy as np
+import pandas as pd
+from PIL import Image
 from tqdm import tqdm
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -71,9 +71,7 @@ def process_image(row, img_output_dir, target_width, target_height, idx):
         img = Image.open(img_path)
         img_array = np.array(img)
 
-        if len(img_array.shape) == 2:
-            img_array = cv2.cvtColor(img_array, cv2.COLOR_GRAY2RGB)
-        elif len(img_array.shape) == 3 and img_array.shape[2] == 1:
+        if len(img_array.shape) == 2 or len(img_array.shape) == 3 and img_array.shape[2] == 1:
             img_array = cv2.cvtColor(img_array, cv2.COLOR_GRAY2RGB)
 
         img_resized = cv2.resize(img_array, (target_width, target_height))

@@ -1,26 +1,26 @@
-from pathlib import Path
-from typing import Dict, Optional
 import argparse
 import csv
+import sys
 import time
+from pathlib import Path
+
 import mlx.core as mx
 import mlx.nn as nn
 import mlx.optimizers as optim
 
-import sys
 # Use vendored mlx-image to path for debugging
 # (I may remove this one I figure out this nan issue)
 sys.path.insert(0, str(Path(__file__).parent.parent / "vendor" / "mlx-image" / "src"))
-from mlxim.model import create_model
+import albumentations as A
+import cv2
+import numpy as np
 from mlxim.data import DataLoader
 from mlxim.data._base import Dataset
-from src.model_utils import freeze_backbone
-
+from mlxim.model import create_model
 from PIL import Image
-import numpy as np
-import cv2
-import albumentations as A
+
 import wandb
+from src.model_utils import freeze_backbone
 
 
 def get_train_transform(aug_size: int = 512, output_size: int = 224):
@@ -91,7 +91,7 @@ class CSVDataset(Dataset):
         self.transform = transform
         self.samples = []
 
-        with open(csv_path, 'r') as f:
+        with open(csv_path) as f:
             reader = csv.DictReader(f)
             for row in reader:
                 filename = row['filename']
@@ -180,7 +180,7 @@ class Trainer:
         throughput = total_samples / epoch_time
         return {"loss": avg_loss, "epoch_time": epoch_time, "throughput": throughput}
 
-    def validate(self, val_loader) -> Dict[str, float]:
+    def validate(self, val_loader) -> dict[str, float]:
         self.model.eval()
         total_loss = 0.0
         total_correct = 0
@@ -211,9 +211,9 @@ class Trainer:
         train_loader,
         val_loader,
         num_epochs: int,
-        checkpoint_dir: Optional[Path] = None,
-        unfreeze_epoch: Optional[int] = None,
-        unfreeze_lr: Optional[float] = None
+        checkpoint_dir: Path | None = None,
+        unfreeze_epoch: int | None = None,
+        unfreeze_lr: float | None = None
     ):
         """Train the model for multiple epochs."""
         if checkpoint_dir:
@@ -448,7 +448,7 @@ def main():
         model.load_weights(str(best_checkpoint))
 
     test_metrics = trainer.validate(test_loader)
-    print(f"\nTest Results:")
+    print("\nTest Results:")
     print(f"  Test Loss: {test_metrics['val_loss']:.4f}")
     print(f"  Test Accuracy: {test_metrics['val_accuracy']:.4f}")
 

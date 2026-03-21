@@ -9,8 +9,8 @@ Converts a patch classifier to a whole image classifier:
 4. Train on full mammograms (1152x896) with binary labels
 """
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import mlx.core as mx
 import mlx.nn as nn

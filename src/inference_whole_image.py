@@ -1,15 +1,15 @@
 """Inference script for whole image classifier."""
 
-from pathlib import Path
 import argparse
 import csv
 import time
+from pathlib import Path
 
-import numpy as np
-import mlx.core as mx
-from PIL import Image
-from sklearn.metrics import roc_auc_score, confusion_matrix
 import albumentations as A
+import mlx.core as mx
+import numpy as np
+from PIL import Image
+from sklearn.metrics import confusion_matrix, roc_auc_score
 
 from src.models.whole_image_classifier import create_whole_image_classifier
 
@@ -22,7 +22,7 @@ def get_inference_transform(target_height=896, target_width=1152):
 
 def load_samples(csv_path):
     samples = []
-    with open(csv_path, 'r') as f:
+    with open(csv_path) as f:
         reader = csv.DictReader(f)
         for row in reader:
             samples.append((row['filename'], int(row['label'])))

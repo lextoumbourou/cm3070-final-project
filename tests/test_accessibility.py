@@ -14,13 +14,13 @@ Source: https://pamelafox.github.io/axe-playwright-python
 
 import subprocess
 import time
-import urllib.request
 import urllib.error
+import urllib.request
 from pathlib import Path
 
 import pytest
-from playwright.sync_api import sync_playwright
 from axe_playwright_python.sync_playwright import Axe
+from playwright.sync_api import sync_playwright
 
 APP_URL = "http://localhost:8502"
 STARTUP_TIMEOUT = 15

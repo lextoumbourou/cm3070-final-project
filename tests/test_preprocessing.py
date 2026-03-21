@@ -1,12 +1,11 @@
 import numpy as np
-import pytest
 
 from src.data.preprocessing import (
-    normalise_to_uint8,
     apply_morphological_transforms,
-    get_largest_contour_bbox,
-    get_breast_bbox,
     crop_to_breast,
+    get_breast_bbox,
+    get_largest_contour_bbox,
+    normalise_to_uint8,
 )
 
 

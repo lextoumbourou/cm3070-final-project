@@ -1,15 +1,12 @@
-from pathlib import Path
-from typing import Tuple
 import argparse
 import logging
+from pathlib import Path
 
-import pandas as pd
-import numpy as np
 import cv2
+import numpy as np
+import pandas as pd
 import pydicom
 from tqdm import tqdm
-from sklearn.model_selection import train_test_split
-
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -51,7 +48,7 @@ def classify_birads(birads) -> str:
 
 def split_data(
     df: pd.DataFrame, test_ratio: float, val_ratio: float, random_state: int = 42
-) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     df_shuffled = df.sample(frac=1, random_state=random_state).reset_index(drop=True)
 
     n_total = len(df_shuffled)

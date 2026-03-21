@@ -1,8 +1,4 @@
-import os
-from pathlib import Path
-import mlx.core as mx
-import mlx.nn as nn
-from mlx.utils import tree_flatten, tree_unflatten
+from mlx.utils import tree_flatten
 
 
 def find_head_name(model):

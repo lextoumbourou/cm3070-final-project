@@ -1,8 +1,9 @@
 """Create small VinDr datasets for UI testing from prepared data."""
 
 import argparse
-from pathlib import Path
 import shutil
+from pathlib import Path
+
 import pandas as pd
 
 # Config

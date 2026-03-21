@@ -1,13 +1,13 @@
-from pathlib import Path
 import argparse
 import csv
 import sys
+from pathlib import Path
 
-import numpy as np
-import mlx.core as mx
-from PIL import Image
-from sklearn.metrics import roc_auc_score, confusion_matrix
 import albumentations as A
+import mlx.core as mx
+import numpy as np
+from PIL import Image
+from sklearn.metrics import confusion_matrix, roc_auc_score
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "vendor" / "mlx-image" / "src"))
 from mlxim.model import create_model
@@ -22,7 +22,7 @@ def get_inference_transform(output_size: int = 224):
 
 def load_samples(csv_path: str):
     samples = []
-    with open(csv_path, 'r') as f:
+    with open(csv_path) as f:
         reader = csv.DictReader(f)
         for row in reader:
             samples.append((row['filename'], int(row['label'])))

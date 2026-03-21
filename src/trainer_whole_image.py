@@ -1,27 +1,25 @@
 """Whole image trainer following Shen et al. (2019) two-stage approach."""
 
-from pathlib import Path
 import argparse
 import csv
 import sys
 import time
+from pathlib import Path
 
 import mlx.core as mx
 import mlx.nn as nn
 import mlx.optimizers as optim
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "vendor" / "mlx-image" / "src"))
+import albumentations as A
+import cv2
+import numpy as np
 from mlxim.data import DataLoader
 from mlxim.data._base import Dataset
-
-from src.models.whole_image_classifier import create_whole_image_classifier
-
 from PIL import Image
-import numpy as np
-import cv2
-import albumentations as A
-import wandb
 
+import wandb
+from src.models.whole_image_classifier import create_whole_image_classifier
 
 NUM_CLASSES = 2
 
@@ -49,7 +47,7 @@ class WholeImageDataset(Dataset):
         self.transform = transform
         self.samples = []
 
-        with open(csv_path, 'r') as f:
+        with open(csv_path) as f:
             reader = csv.DictReader(f)
             for row in reader:
                 self.samples.append((row['filename'], int(row['label'])))
@@ -295,7 +293,7 @@ def main():
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
 
-    print(f"\nCreating whole image classifier...")
+    print("\nCreating whole image classifier...")
     print(f"  Backbone: {args.backbone}")
     print(f"  Patch weights: {args.patch_weights}")
 
@@ -353,7 +351,7 @@ def main():
         model.load_weights(str(best_checkpoint))
 
     test_metrics = trainer.validate(test_loader)
-    print(f"\nTest Results:")
+    print("\nTest Results:")
     print(f"  Loss: {test_metrics['val_loss']:.4f}")
     print(f"  Accuracy: {test_metrics['val_accuracy']:.4f}")
     print(f"  AUC: {test_metrics['val_auc']:.4f}")

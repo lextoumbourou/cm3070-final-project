@@ -9,18 +9,17 @@ Implements S10-style patch sampling similar to Shen et al. (2019):
 See notebook for breakdown: notebooks/04-patches.ipynb
 """
 
-from pathlib import Path
-from typing import List, Tuple, Optional, Dict
 import argparse
 import logging
+from pathlib import Path
 
-import pandas as pd
-import numpy as np
 import cv2
-from tqdm import tqdm
+import numpy as np
+import pandas as pd
 from sklearn.model_selection import train_test_split
+from tqdm import tqdm
 
-from src.data.cbis_ddsm import parse_dcm_path, resolve_dcm_path, load_dicom_array
+from src.data.cbis_ddsm import load_dicom_array, parse_dcm_path, resolve_dcm_path
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -39,7 +38,7 @@ OUTPUT_ROOT = Path("datasets/prep/cbis-ddsm-patches")
 IMG_OUTPUT_DIR = OUTPUT_ROOT / "img"
 
 
-def load_and_combine_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def load_and_combine_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Load CBIS-DDSM CSVs from fixed-csv directory and metadata.
     """
@@ -75,7 +74,7 @@ def load_and_combine_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
 
 def split_by_patient(
     df: pd.DataFrame, val_ratio: float, random_state: int = 42
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Split data at patient level to avoid data leakage
     """
@@ -152,7 +151,7 @@ def extract_roi_patches(
     patch_size: int = PATCH_SIZE,
     num_patches: int = PATCHES_PER_ROI,
     min_overlap: float = MIN_OVERLAP_RATIO
-) -> List[np.ndarray]:
+) -> list[np.ndarray]:
     """
     Extract patches centered around ROI with context.
 
@@ -274,10 +273,10 @@ def extract_roi_patches(
 
 def extract_background_patches(
     full_image: np.ndarray,
-    all_masks: List[np.ndarray],
+    all_masks: list[np.ndarray],
     patch_size: int = PATCH_SIZE,
     num_patches: int = PATCHES_PER_BG
-) -> List[np.ndarray]:
+) -> list[np.ndarray]:
     """
     Extract background patches from breast tissue avoiding all ROI regions.
 
@@ -384,7 +383,7 @@ def extract_background_patches(
     return patches
 
 
-def group_abnormalities_by_image(df: pd.DataFrame) -> Dict[tuple, pd.DataFrame]:
+def group_abnormalities_by_image(df: pd.DataFrame) -> dict[tuple, pd.DataFrame]:
     """
     Group all abnormalities that belong to the same mammogram image.
 
@@ -403,7 +402,7 @@ def group_abnormalities_by_image(df: pd.DataFrame) -> Dict[tuple, pd.DataFrame]:
     return grouped
 
 
-def load_full_image(row: pd.Series, metadata_df: pd.DataFrame) -> Optional[np.ndarray]:
+def load_full_image(row: pd.Series, metadata_df: pd.DataFrame) -> np.ndarray | None:
     """Load full mammogram image from DICOM using metadata lookup."""
     image_path_str = row["image file path"]
     try:
@@ -421,7 +420,7 @@ def load_full_image(row: pd.Series, metadata_df: pd.DataFrame) -> Optional[np.nd
     return None
 
 
-def load_roi_mask(row: pd.Series, metadata_df: pd.DataFrame) -> Optional[np.ndarray]:
+def load_roi_mask(row: pd.Series, metadata_df: pd.DataFrame) -> np.ndarray | None:
     """Load ROI mask from DICOM using metadata lookup."""
     try:
         mask_path_str = row.get("ROI mask file path")
@@ -453,7 +452,7 @@ def process_image_group(
     image_idx: int,
     patches_per_roi: int = PATCHES_PER_ROI,
     patches_per_bg: int = PATCHES_PER_BG
-) -> List[dict]:
+) -> list[dict]:
     """
     Process all abnormalities for a single mammogram image.
     """
@@ -551,7 +550,7 @@ def process_and_save_split(
     patches_per_roi: int = PATCHES_PER_ROI,
     patches_per_bg: int = PATCHES_PER_BG,
     start_idx: int = 0
-) -> Tuple[pd.DataFrame, int]:
+) -> tuple[pd.DataFrame, int]:
     """
     Process all images in a split and save metadata.
     """

@@ -1,15 +1,15 @@
 """Multi-view fusion inference - average CC and MLO predictions per breast."""
 
-from pathlib import Path
 import argparse
-import sys
 import csv
+import sys
+from pathlib import Path
 
+import albumentations as A
 import mlx.core as mx
 import numpy as np
 from PIL import Image
-import albumentations as A
-from sklearn.metrics import roc_auc_score, confusion_matrix
+from sklearn.metrics import confusion_matrix, roc_auc_score
 from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "vendor" / "mlx-image" / "src"))
@@ -87,7 +87,7 @@ def main():
 
     # Load samples
     samples = []
-    with open(csv_path, 'r') as f:
+    with open(csv_path) as f:
         reader = csv.DictReader(f)
         for row in reader:
             samples.append(row)
@@ -183,7 +183,7 @@ def main():
     print(f"Specificity (avg): {spec_avg:.4f}")
     print(f"Accuracy (avg):    {acc_avg:.4f}")
     print("-" * 50)
-    print(f"Confusion Matrix (avg, threshold=0.5):")
+    print("Confusion Matrix (avg, threshold=0.5):")
     print(f"  TP: {tp:4d}  FN: {fn:4d}")
     print(f"  FP: {fp:4d}  TN: {tn:4d}")
     print("=" * 50)

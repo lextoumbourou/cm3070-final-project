@@ -1,25 +1,25 @@
 """Streamlit web interface for mammogram classification and fine-tuning."""
 
-from pathlib import Path
 import sys
 import time
-import csv
+from pathlib import Path
 
-import streamlit as st
-import numpy as np
-from PIL import Image
-import pydicom
+import albumentations as A
+import cv2
 import mlx.core as mx
 import mlx.nn as nn
 import mlx.optimizers as optim
-import albumentations as A
-import cv2
+import numpy as np
+import pydicom
+import streamlit as st
+from PIL import Image
 from sklearn.metrics import roc_auc_score
 
 # Ensure mlx-image is in path.
 sys.path.insert(0, str(Path(__file__).parent.parent / "vendor" / "mlx-image" / "src"))
 from mlxim.data import DataLoader
 from mlxim.data._base import Dataset
+
 from src.models.whole_image_classifier import create_whole_image_classifier
 
 DEFAULT_WEIGHTS = "checkpoints/default/cbis-whole-wd-only/best_model.safetensors"

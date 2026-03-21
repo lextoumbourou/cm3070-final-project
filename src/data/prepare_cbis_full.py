@@ -12,20 +12,23 @@ Supports two modes:
 - roi: Extract pre-cropped ROI abnormality images (higher resolution on lesion)
 """
 
-from pathlib import Path
-from typing import Tuple
 import argparse
 import logging
+from pathlib import Path
 
-import pandas as pd
-import numpy as np
 import cv2
-from tqdm import tqdm
+import numpy as np
+import pandas as pd
 from sklearn.model_selection import train_test_split
+from tqdm import tqdm
 
-from src.data.cbis_ddsm import DCMData, parse_dcm_path, resolve_dcm_path, load_dicom_array
+from src.data.cbis_ddsm import (
+    DCMData,
+    load_dicom_array,
+    parse_dcm_path,
+    resolve_dcm_path,
+)
 from src.data.preprocessing import get_breast_bbox, normalise_to_uint8
-
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -40,7 +43,7 @@ OUTPUT_ROOT = Path("datasets/prep/cbis-ddsm")
 IMG_OUTPUT_DIR = OUTPUT_ROOT / "img"
 
 
-def load_and_combine_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def load_and_combine_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Load CBIS-DDSM CSVs and keep train/test splits separate
 
@@ -78,7 +81,7 @@ def load_and_combine_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
 
 def split_by_patient(
     df: pd.DataFrame, val_ratio: float, random_state: int = 42
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Split data at patient level to avoid data leakage
 

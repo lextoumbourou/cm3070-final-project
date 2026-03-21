@@ -7,19 +7,17 @@ for domain shift experiments with the Shen et al. pipeline.
 Todo: refactor and reduce duplication between prepare_cbis_whole.py
 """
 
-from pathlib import Path
-from typing import Tuple
 import argparse
 import logging
+from pathlib import Path
 
-import pandas as pd
-import numpy as np
 import cv2
+import numpy as np
+import pandas as pd
 import pydicom
 from tqdm import tqdm
 
-from src.data.preprocessing import normalise_to_uint8, get_breast_bbox
-
+from src.data.preprocessing import get_breast_bbox, normalise_to_uint8
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -60,7 +58,7 @@ def classify_birads(birads) -> str:
 
 def split_data(
     df: pd.DataFrame, test_ratio: float, val_ratio: float, random_state: int = 42
-) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     df_shuffled = df.sample(frac=1, random_state=random_state).reset_index(drop=True)
 
     n_total = len(df_shuffled)
@@ -149,7 +147,7 @@ def process_and_save_split(
     target_height: int,
     crop_breast: bool,
     start_idx: int = 0
-) -> Tuple[pd.DataFrame, int]:
+) -> tuple[pd.DataFrame, int]:
     logger.info(f"Processing {split_name} split...")
 
     processed_cases = []

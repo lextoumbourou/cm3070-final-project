@@ -10,20 +10,22 @@ Shen et al. (2019) approach:
 - No cropping, preserves full breast context
 """
 
-from pathlib import Path
-from typing import Tuple, Optional, Dict, List
 import argparse
 import logging
+from pathlib import Path
 
-import pandas as pd
-import numpy as np
 import cv2
-from tqdm import tqdm
+import numpy as np
+import pandas as pd
 from sklearn.model_selection import train_test_split
+from tqdm import tqdm
 
-from src.data.cbis_ddsm import DCMData, parse_dcm_path, resolve_dcm_path, load_dicom_array
+from src.data.cbis_ddsm import (
+    load_dicom_array,
+    parse_dcm_path,
+    resolve_dcm_path,
+)
 from src.data.preprocessing import get_breast_bbox, normalise_to_uint8
-
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -41,7 +43,7 @@ OUTPUT_ROOT = Path("datasets/prep/cbis-ddsm-whole")
 IMG_OUTPUT_DIR = OUTPUT_ROOT / "img"
 
 
-def load_and_combine_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def load_and_combine_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Load CBIS-DDSM CSVs and keep train/test splits separate.
     """
@@ -76,7 +78,7 @@ def load_and_combine_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
 
 def split_by_patient(
     df: pd.DataFrame, val_ratio: float, random_state: int = 42
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Split data at patient level to avoid data leakage.
     """
@@ -96,7 +98,7 @@ def split_by_patient(
     return train_df, val_df
 
 
-def group_by_image(df: pd.DataFrame) -> Dict[tuple, pd.DataFrame]:
+def group_by_image(df: pd.DataFrame) -> dict[tuple, pd.DataFrame]:
     """
     Group abnormalities by unique mammogram image.
 
@@ -128,7 +130,7 @@ def get_image_label(group_df: pd.DataFrame) -> int:
     return 0
 
 
-def get_abnormality_summary(group_df: pd.DataFrame) -> Dict:
+def get_abnormality_summary(group_df: pd.DataFrame) -> dict:
     """
     Summarise abnormalities in an image for metadata.
     """
@@ -161,7 +163,7 @@ def preprocess_mammogram(
     return cv2.resize(img_normalized, (target_width, target_height))
 
 
-def load_full_image(row: pd.Series, metadata_df: pd.DataFrame) -> Optional[np.ndarray]:
+def load_full_image(row: pd.Series, metadata_df: pd.DataFrame) -> np.ndarray | None:
     """Load full mammogram image from DICOM."""
     image_path_str = row["image file path"]
     try:
@@ -188,7 +190,7 @@ def process_image(
     target_width: int = TARGET_WIDTH,
     target_height: int = TARGET_HEIGHT,
     crop_breast: bool = False,
-) -> Optional[dict]:
+) -> dict | None:
     """
     Process a single mammogram image.
     """
@@ -241,7 +243,7 @@ def process_and_save_split(
     target_height: int = TARGET_HEIGHT,
     crop_breast: bool = False,
     start_idx: int = 0
-) -> Tuple[pd.DataFrame, int]:
+) -> tuple[pd.DataFrame, int]:
     """
     Process all images in a split and save metadata.
     """

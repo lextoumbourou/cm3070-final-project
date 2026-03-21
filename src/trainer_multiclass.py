@@ -9,28 +9,27 @@ Classes:
   4: Malignant calcification
 """
 
-from pathlib import Path
-from typing import Dict, Optional
-from collections import Counter
 import argparse
 import csv
+import sys
+from collections import Counter
+from pathlib import Path
+
 import mlx.core as mx
 import mlx.nn as nn
 import mlx.optimizers as optim
 
-import sys
 sys.path.insert(0, str(Path(__file__).parent.parent / "vendor" / "mlx-image" / "src"))
-from mlxim.model import create_model
+import albumentations as A
+import cv2
+import numpy as np
 from mlxim.data import DataLoader
 from mlxim.data._base import Dataset
-from src.model_utils import freeze_backbone, freeze_backbone_except_top_n
-
+from mlxim.model import create_model
 from PIL import Image
-import numpy as np
-import cv2
-import albumentations as A
-import wandb
 
+import wandb
+from src.model_utils import freeze_backbone, freeze_backbone_except_top_n
 
 NUM_CLASSES = 5
 CLASS_NAMES = ["Background", "Benign mass", "Malignant mass", "Benign calc", "Malignant calc"]
@@ -84,7 +83,7 @@ class CSVDataset(Dataset):
         self.transform = transform
         self.samples = []
 
-        with open(csv_path, 'r') as f:
+        with open(csv_path) as f:
             reader = csv.DictReader(f)
             for row in reader:
                 filename = row['filename']
@@ -142,7 +141,7 @@ class MultiClassTrainer:
         self,
         model: nn.Module,
         optimizer: optim.Optimizer,
-        class_weights: Optional[mx.array] = None,
+        class_weights: mx.array | None = None,
         num_classes: int = NUM_CLASSES
     ):
         self.model = model
@@ -198,7 +197,7 @@ class MultiClassTrainer:
         avg_loss = total_loss / total_samples
         return {"loss": avg_loss}
 
-    def validate(self, val_loader) -> Dict[str, float]:
+    def validate(self, val_loader) -> dict[str, float]:
         """Validate and compute per-class metrics."""
         self.model.eval()
         total_loss = 0.0
@@ -230,7 +229,7 @@ class MultiClassTrainer:
             all_predictions.extend(preds_np.tolist())
             all_targets.extend(targets_np.tolist())
 
-            for pred, target in zip(preds_np, targets_np):
+            for pred, target in zip(preds_np, targets_np, strict=False):
                 class_total[target] += 1
                 if pred == target:
                     class_correct[target] += 1
@@ -260,12 +259,12 @@ class MultiClassTrainer:
         train_loader,
         val_loader,
         num_epochs: int,
-        checkpoint_dir: Optional[Path] = None,
-        stage2_epoch: Optional[int] = None,
-        stage2_lr: Optional[float] = None,
-        stage2_unfreeze_layers: Optional[int] = None,
-        stage3_epoch: Optional[int] = None,
-        stage3_lr: Optional[float] = None
+        checkpoint_dir: Path | None = None,
+        stage2_epoch: int | None = None,
+        stage2_lr: float | None = None,
+        stage2_unfreeze_layers: int | None = None,
+        stage3_epoch: int | None = None,
+        stage3_lr: float | None = None
     ):
         """
         Train the model with 3-stage progressive unfreezing (following Shen et al.).
@@ -519,7 +518,7 @@ def main():
 
     test_metrics = trainer.validate(test_loader)
     print()
-    print(f"Test Results:")
+    print("Test Results:")
     print(f"  Test Loss: {test_metrics['val_loss']:.4f}")
     print(f"  Test Accuracy: {test_metrics['val_accuracy']:.4f}")
     print("  Per-class accuracy:")
