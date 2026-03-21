@@ -284,7 +284,9 @@ class MultiClassTrainer:
             print("-" * 50)
 
             if stage2_epoch is not None and epoch == stage2_epoch:
-                print(f"\n>>> Stage 2: Unfreezing top {stage2_unfreeze_layers} layers, LR={stage2_lr}")
+                print(
+                    f"\n>>> Stage 2: Unfreezing top {stage2_unfreeze_layers} layers, LR={stage2_lr}"
+                )
                 freeze_backbone_except_top_n(self.model, n_layers=stage2_unfreeze_layers)
                 self.optimizer = optim.Adam(learning_rate=stage2_lr)
 
@@ -310,7 +312,11 @@ class MultiClassTrainer:
                 "train_loss": train_metrics['loss'],
                 "val_loss": val_metrics['val_loss'],
                 "val_accuracy": val_metrics['val_accuracy'],
-                "learning_rate": self.optimizer.learning_rate.item() if hasattr(self.optimizer.learning_rate, 'item') else self.optimizer.learning_rate
+                "learning_rate": (
+                    self.optimizer.learning_rate.item()
+                    if hasattr(self.optimizer.learning_rate, 'item')
+                    else self.optimizer.learning_rate
+                )
             }
             for class_name, acc in val_metrics['per_class_accuracy'].items():
                 log_dict[f"val_acc_{class_name.replace(' ', '_')}"] = acc
@@ -476,7 +482,10 @@ def main():
     print()
     print("Starting 3-stage training (Shen et al. 2019)...")
     print(f"Stage 1 (epochs 1-{STAGE1_EPOCHS}): Head only, LR={STAGE1_LR}")
-    print(f"Stage 2 (epochs {stage2_start+1}-{stage3_start}): Top {STAGE2_UNFREEZE_LAYERS} layers, LR={STAGE2_LR}")
+    print(
+        f"Stage 2 (epochs {stage2_start+1}-{stage3_start}): "
+        f"Top {STAGE2_UNFREEZE_LAYERS} layers, LR={STAGE2_LR}"
+    )
     print(f"Stage 3 (epochs {stage3_start+1}-{NUM_EPOCHS}): All layers, LR={STAGE3_LR}")
 
     trainer.fit(

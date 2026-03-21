@@ -239,26 +239,27 @@ class Trainer:
             train_metrics = self.train_epoch(train_loader, epoch)
             epoch_times.append(train_metrics['epoch_time'])
             print(f"Training Loss: {train_metrics['loss']:.4f}")
-            print(f"  Epoch time: {train_metrics['epoch_time']:.1f}s, Throughput: {train_metrics['throughput']:.2f} img/s")
+            epoch_time = train_metrics['epoch_time']
+            throughput = train_metrics['throughput']
+            print(f"  Epoch time: {epoch_time:.1f}s, Throughput: {throughput:.2f} img/s")
 
             # Validation
             val_metrics = self.validate(val_loader)
             print(f"Validation Loss: {val_metrics['val_loss']:.4f}")
             print(f"Validation Accuracy: {val_metrics['val_accuracy']:.4f}")
 
-            # Get memory usage if available
-            peak_memory_gb = None
-            try:
-                peak_memory_gb = mx.get_peak_memory() / (1024**3)
-            except:
-                pass
+            peak_memory_gb = mx.get_peak_memory() / (1024**3)
 
             log_dict = {
                 "epoch": epoch + 1,
                 "train_loss": train_metrics['loss'],
                 "val_loss": val_metrics['val_loss'],
                 "val_accuracy": val_metrics['val_accuracy'],
-                "learning_rate": self.optimizer.learning_rate.item() if hasattr(self.optimizer.learning_rate, 'item') else self.optimizer.learning_rate,
+                "learning_rate": (
+                    self.optimizer.learning_rate.item()
+                    if hasattr(self.optimizer.learning_rate, 'item')
+                    else self.optimizer.learning_rate
+                ),
                 "epoch_time_sec": train_metrics['epoch_time'],
                 "throughput_img_per_sec": train_metrics['throughput'],
             }
@@ -401,7 +402,10 @@ def main():
 
     print("\nStarting training...")
     print(f"Phase 1 (epochs 1-{UNFREEZE_EPOCH}): Training head only with LR={LEARNING_RATE}")
-    print(f"Phase 2 (epochs {UNFREEZE_EPOCH+1}-{NUM_EPOCHS}): Fine-tuning entire model with LR={UNFREEZE_LR}")
+    print(
+        f"Phase 2 (epochs {UNFREEZE_EPOCH+1}-{NUM_EPOCHS}): "
+        f"Fine-tuning entire model with LR={UNFREEZE_LR}"
+    )
 
     training_stats = trainer.fit(
         train_loader=train_loader,
@@ -420,11 +424,8 @@ def main():
     print(f"Total training time: {training_stats['total_time_sec']:.1f}s ({total_hours:.2f} hours)")
     print(f"Average epoch time: {training_stats['avg_epoch_time']:.1f}s")
     print(f"Best validation loss: {training_stats['best_val_loss']:.4f}")
-    try:
-        peak_mem = mx.get_peak_memory() / (1024**3)
-        print(f"Peak memory usage: {peak_mem:.2f} GB")
-    except:
-        pass
+    peak_mem = mx.get_peak_memory() / (1024**3)
+    print(f"Peak memory usage: {peak_mem:.2f} GB")
     print("=" * 50)
 
     print("\nRunning inference on test set...")
@@ -459,10 +460,7 @@ def main():
         "total_training_time_hours": training_stats['total_time_sec'] / 3600,
         "avg_epoch_time_sec": training_stats['avg_epoch_time'],
     }
-    try:
-        final_log["peak_memory_gb"] = mx.get_peak_memory() / (1024**3)
-    except:
-        pass
+    final_log["peak_memory_gb"] = mx.get_peak_memory() / (1024**3)
     wandb.log(final_log)
 
     wandb.finish()

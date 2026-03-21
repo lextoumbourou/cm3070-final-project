@@ -41,10 +41,7 @@ def freeze_backbone_except_top_n(model, n_layers: int = 46):
         parts = name.split('.')
         obj = model
         for part in parts[:-1]:
-            if part.isdigit():
-                obj = obj[int(part)]
-            else:
-                obj = getattr(obj, part)
+            obj = obj[int(part)] if part.isdigit() else getattr(obj, part)
         final_part = parts[-1]
         if final_part.isdigit():
             pass

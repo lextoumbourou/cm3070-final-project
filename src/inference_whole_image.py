@@ -172,8 +172,10 @@ def main():
     parser.add_argument("--target-width", type=int, default=1152)
     parser.add_argument("--batch-size", type=int, default=2)
     parser.add_argument("--threshold", type=float, default=0.5)
-    parser.add_argument("--tta", action="store_true",
-                        help="Enable test-time augmentation (4 variants: original, h-flip, v-flip, both)")
+    parser.add_argument(
+        "--tta", action="store_true",
+        help="Enable test-time augmentation (4 variants: original, h-flip, v-flip, both)"
+    )
     args = parser.parse_args()
 
     data_dir = Path(args.data_dir)
@@ -195,8 +197,8 @@ def main():
     print(f"Total samples: {len(samples)}")
 
     labels = [s[1] for s in samples]
-    n_benign = sum(1 for l in labels if l == 0)
-    n_malignant = sum(1 for l in labels if l == 1)
+    n_benign = sum(1 for label in labels if label == 0)
+    n_malignant = sum(1 for label in labels if label == 1)
     print(f"  Benign: {n_benign}, Malignant: {n_malignant}")
 
     transform = get_inference_transform(args.target_height, args.target_width)
@@ -231,11 +233,8 @@ def main():
     print(f"Number of samples: {timing_stats['num_samples']}")
     print(f"Average latency per image: {timing_stats['avg_latency_per_image_ms']:.1f}ms")
     print(f"Throughput: {timing_stats['throughput_img_per_sec']:.2f} images/sec")
-    try:
-        peak_mem = mx.get_peak_memory() / (1024**3)
-        print(f"Peak memory usage: {peak_mem:.2f} GB")
-    except:
-        pass
+    peak_mem = mx.get_peak_memory() / (1024**3)
+    print(f"Peak memory usage: {peak_mem:.2f} GB")
     print("=" * 50)
 
 

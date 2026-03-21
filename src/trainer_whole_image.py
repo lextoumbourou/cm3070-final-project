@@ -119,7 +119,10 @@ class WholeImageTrainer:
         avg_loss = total_loss / total_samples
         avg_acc = total_correct / total_samples
         throughput = total_samples / epoch_time
-        return {"loss": avg_loss, "accuracy": avg_acc, "epoch_time": epoch_time, "throughput": throughput}
+        return {
+            "loss": avg_loss, "accuracy": avg_acc,
+            "epoch_time": epoch_time, "throughput": throughput
+        }
 
     def validate(self, val_loader):
         self.model.eval()
@@ -151,7 +154,7 @@ class WholeImageTrainer:
         try:
             from sklearn.metrics import roc_auc_score
             auc = roc_auc_score(all_targets, all_probs)
-        except:
+        except Exception:
             auc = 0.0
 
         return {
@@ -177,23 +180,28 @@ class WholeImageTrainer:
             print("-" * 50)
 
             if stage2_epoch is not None and epoch == stage2_epoch:
-                print(f"\n>>> Stage 2: Unfreezing backbone, LR={stage2_lr}, weight_decay={stage2_weight_decay}")
+                print(
+                    f"\n>>> Stage 2: Unfreezing backbone, LR={stage2_lr}, "
+                    f"weight_decay={stage2_weight_decay}"
+                )
                 self.model.unfreeze_all()
-                self.optimizer = optim.AdamW(learning_rate=stage2_lr, weight_decay=stage2_weight_decay or 0.0)
+                wd = stage2_weight_decay or 0.0
+                self.optimizer = optim.AdamW(learning_rate=stage2_lr, weight_decay=wd)
 
             train_metrics = self.train_epoch(train_loader, epoch)
             epoch_times.append(train_metrics['epoch_time'])
-            print(f"Training - Loss: {train_metrics['loss']:.4f}, Acc: {train_metrics['accuracy']:.4f}")
-            print(f"  Epoch time: {train_metrics['epoch_time']:.1f}s, Throughput: {train_metrics['throughput']:.2f} img/s")
+            loss, acc = train_metrics['loss'], train_metrics['accuracy']
+            print(f"Training - Loss: {loss:.4f}, Acc: {acc:.4f}")
+            epoch_time = train_metrics['epoch_time']
+            throughput = train_metrics['throughput']
+            print(f"  Epoch time: {epoch_time:.1f}s, Throughput: {throughput:.2f} img/s")
 
             val_metrics = self.validate(val_loader)
-            print(f"Validation - Loss: {val_metrics['val_loss']:.4f}, Acc: {val_metrics['val_accuracy']:.4f}, AUC: {val_metrics['val_auc']:.4f}")
+            v_loss = val_metrics['val_loss']
+            v_acc, v_auc = val_metrics['val_accuracy'], val_metrics['val_auc']
+            print(f"Validation - Loss: {v_loss:.4f}, Acc: {v_acc:.4f}, AUC: {v_auc:.4f}")
 
-            peak_memory_gb = None
-            try:
-                peak_memory_gb = mx.get_peak_memory() / (1024**3)
-            except:
-                pass
+            peak_memory_gb = mx.get_peak_memory() / (1024**3)
 
             lr = self.optimizer.learning_rate
             if hasattr(lr, 'item'):
@@ -286,12 +294,13 @@ def main():
     print(f"Validation samples: {len(val_dataset)}")
 
     train_labels = [label for _, label in train_dataset.samples]
-    n_benign = sum(1 for l in train_labels if l == 0)
-    n_malignant = sum(1 for l in train_labels if l == 1)
+    n_benign = sum(1 for label in train_labels if label == 0)
+    n_malignant = sum(1 for label in train_labels if label == 1)
     print(f"Training class distribution: Benign={n_benign}, Malignant={n_malignant}")
 
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
-    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
+    batch_size = args.batch_size
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
 
     print("\nCreating whole image classifier...")
     print(f"  Backbone: {args.backbone}")
@@ -310,8 +319,14 @@ def main():
     optimizer = optim.AdamW(learning_rate=args.stage1_lr, weight_decay=args.stage1_weight_decay)
     trainer = WholeImageTrainer(model, optimizer, NUM_CLASSES)
 
-    print(f"Stage 1: Epochs 1-{args.stage1_epochs}, LR={args.stage1_lr}, weight_decay={args.stage1_weight_decay}")
-    print(f"Stage 2: Epochs {args.stage1_epochs+1}-{args.epochs}, LR={args.stage2_lr}, weight_decay={args.stage2_weight_decay}")
+    print(
+        f"Stage 1: Epochs 1-{args.stage1_epochs}, "
+        f"LR={args.stage1_lr}, weight_decay={args.stage1_weight_decay}"
+    )
+    print(
+        f"Stage 2: Epochs {args.stage1_epochs+1}-{args.epochs}, "
+        f"LR={args.stage2_lr}, weight_decay={args.stage2_weight_decay}"
+    )
 
     training_stats = trainer.fit(
         train_loader=train_loader,
@@ -331,11 +346,8 @@ def main():
     print(f"Total training time: {training_stats['total_time_sec']:.1f}s ({total_hours:.2f} hours)")
     print(f"Average epoch time: {training_stats['avg_epoch_time']:.1f}s")
     print(f"Best validation AUC: {training_stats['best_val_auc']:.4f}")
-    try:
-        peak_mem = mx.get_peak_memory() / (1024**3)
-        print(f"Peak memory usage: {peak_mem:.2f} GB")
-    except:
-        pass
+    peak_mem = mx.get_peak_memory() / (1024**3)
+    print(f"Peak memory usage: {peak_mem:.2f} GB")
     print("=" * 50)
 
     print("\nEvaluating on test set...")
@@ -364,10 +376,7 @@ def main():
         "total_training_time_hours": training_stats['total_time_sec'] / 3600,
         "avg_epoch_time_sec": training_stats['avg_epoch_time'],
     }
-    try:
-        final_log["peak_memory_gb"] = mx.get_peak_memory() / (1024**3)
-    except:
-        pass
+    final_log["peak_memory_gb"] = mx.get_peak_memory() / (1024**3)
     wandb.log(final_log)
 
     wandb.finish()

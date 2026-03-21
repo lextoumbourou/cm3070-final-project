@@ -139,7 +139,7 @@ def main():
     y_prob_avg = []
     y_prob_max = []
 
-    for breast_key, data in breast_preds.items():
+    for _breast_key, data in breast_preds.items():
         y_true.append(data['label'])
         y_prob_avg.append(np.mean(data['probs']))
         y_prob_max.append(np.max(data['probs']))
@@ -148,7 +148,6 @@ def main():
     y_prob_avg = np.array(y_prob_avg)
     y_prob_max = np.array(y_prob_max)
     y_pred_avg = (y_prob_avg >= 0.5).astype(int)
-    y_pred_max = (y_prob_max >= 0.5).astype(int)
 
     # Metrics
     auc_avg = roc_auc_score(y_true, y_prob_avg)
@@ -174,8 +173,8 @@ def main():
     print("BREAST-LEVEL RESULTS (Multi-view Fusion)")
     print("=" * 50)
     print(f"Breasts: {len(breast_preds)}")
-    print(f"  Benign: {sum(1 for l in y_true if l == 0)}")
-    print(f"  Malignant: {sum(1 for l in y_true if l == 1)}")
+    print(f"  Benign: {sum(1 for label in y_true if label == 0)}")
+    print(f"  Malignant: {sum(1 for label in y_true if label == 1)}")
     print("-" * 50)
     print(f"AUC (avg fusion):  {auc_avg:.4f}")
     print(f"AUC (max fusion):  {auc_max:.4f}")

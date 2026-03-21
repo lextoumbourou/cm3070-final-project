@@ -96,9 +96,18 @@ def compute_metrics(probs, labels, threshold: float = 0.5):
 
 def main():
     parser = argparse.ArgumentParser(description="Run inference and compute metrics")
-    parser.add_argument("--data-dir", type=str, required=True, help="Path to data directory containing test.csv and img/")
-    parser.add_argument("--weights", type=str, required=True, help="Path to model weights (.npz)")
-    parser.add_argument("--model-name", type=str, default="efficientnet_b0.mlxim", help="Model architecture name")
+    parser.add_argument(
+        "--data-dir", type=str, required=True,
+        help="Path to data directory containing test.csv and img/"
+    )
+    parser.add_argument(
+        "--weights", type=str, required=True,
+        help="Path to model weights (.safetensors)"
+    )
+    parser.add_argument(
+        "--model-name", type=str, default="efficientnet_b0.mlxim",
+        help="Model architecture name"
+    )
     parser.add_argument("--image-size", type=int, default=224, help="Image size")
     parser.add_argument("--batch-size", type=int, default=32, help="Batch size")
     parser.add_argument("--threshold", type=float, default=0.5, help="Classification threshold")

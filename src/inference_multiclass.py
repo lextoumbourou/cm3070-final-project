@@ -154,7 +154,9 @@ def compute_5class_metrics(predictions, labels_binary, probs_5class):
 
     # Count predictions per class
     benign_pred_counts = {CLASS_NAMES[i]: np.sum(benign_preds == i) for i in range(NUM_CLASSES)}
-    malignant_pred_counts = {CLASS_NAMES[i]: np.sum(malignant_preds == i) for i in range(NUM_CLASSES)}
+    malignant_pred_counts = {
+        CLASS_NAMES[i]: np.sum(malignant_preds == i) for i in range(NUM_CLASSES)
+    }
 
     return {
         'benign_sample_predictions': benign_pred_counts,
@@ -211,8 +213,8 @@ def main():
 
     # Count label distribution
     labels = [s[1] for s in samples]
-    n_benign = sum(1 for l in labels if l == 0)
-    n_malignant = sum(1 for l in labels if l == 1)
+    n_benign = sum(1 for label in labels if label == 0)
+    n_malignant = sum(1 for label in labels if label == 1)
     print(f"  Benign: {n_benign}, Malignant: {n_malignant}")
 
     print("\nRunning inference...")
@@ -253,14 +255,16 @@ def main():
     print("\n" + "=" * 60)
     print("5-CLASS PREDICTION DISTRIBUTION")
     print("=" * 60)
-    print(f"\nFor BENIGN samples (n={class_metrics['total_benign']}):")
+    total_benign = class_metrics['total_benign']
+    print(f"\nFor BENIGN samples (n={total_benign}):")
     for class_name, count in class_metrics['benign_sample_predictions'].items():
-        pct = 100 * count / class_metrics['total_benign'] if class_metrics['total_benign'] > 0 else 0
+        pct = 100 * count / total_benign if total_benign > 0 else 0
         print(f"  {class_name:20s}: {count:4d} ({pct:5.1f}%)")
 
-    print(f"\nFor MALIGNANT samples (n={class_metrics['total_malignant']}):")
+    total_malignant = class_metrics['total_malignant']
+    print(f"\nFor MALIGNANT samples (n={total_malignant}):")
     for class_name, count in class_metrics['malignant_sample_predictions'].items():
-        pct = 100 * count / class_metrics['total_malignant'] if class_metrics['total_malignant'] > 0 else 0
+        pct = 100 * count / total_malignant if total_malignant > 0 else 0
         print(f"  {class_name:20s}: {count:4d} ({pct:5.1f}%)")
 
     print("=" * 60)
