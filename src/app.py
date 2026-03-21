@@ -40,13 +40,17 @@ TRAINING_PRESETS = {
 MODEL_DESCRIPTIONS = {
     "cbis-whole-wd-only": {
         "name": "CBIS-DDSM Base Model (Default)",
-        "description": "Trained on CBIS-DDSM dataset. Use this as a starting point for fine-tuning.",
+        "description": (
+            "Trained on CBIS-DDSM dataset. "
+            "Use this as a starting point for fine-tuning."),
         "is_default": True,
         "vendor": True,
     },
     "cbis-whole-final": {
         "name": "CBIS-DDSM Final",
-        "description": "Trained on CBIS-DDSM train+val set. Slightly higher AUC but used test-set selection.",
+        "description": (
+            "Trained on CBIS-DDSM train+val set. "
+            "Slightly higher AUC but used test-set selection."),
         "is_default": False,
         "vendor": True,
     },
@@ -167,8 +171,12 @@ def validate_training_folder(folder_path):
         return None, "Folder must contain 'benign/' and 'malignant/' subfolders"
 
     image_extensions = {'.png', '.jpg', '.jpeg', '.dcm', '.dicom'}
-    benign_images = [f for f in benign_folder.iterdir() if f.suffix.lower() in image_extensions]
-    malignant_images = [f for f in malignant_folder.iterdir() if f.suffix.lower() in image_extensions]
+    benign_images = [
+        f for f in benign_folder.iterdir() if f.suffix.lower() in image_extensions
+    ]
+    malignant_images = [
+        f for f in malignant_folder.iterdir() if f.suffix.lower() in image_extensions
+    ]
 
     if len(benign_images) == 0 or len(malignant_images) == 0:
         return None, "Both folders must contain at least one image"
@@ -397,7 +405,7 @@ def inference_tab():
                 st.divider()
                 st.markdown("**Model Comparison**")
                 comparison_data = []
-                for path, res in st.session_state.batch_results.items():
+                for _path, res in st.session_state.batch_results.items():
                     m = res["metrics"]
                     comparison_data.append({
                         "Model": res["model_name"],
@@ -452,7 +460,9 @@ def inference_tab():
                 st.progress(malignant_prob)
 
                 # Add confidence explanation
-                confidence_level, confidence_explanation = get_confidence_description(malignant_prob)
+                confidence_level, confidence_explanation = get_confidence_description(
+                    malignant_prob
+                )
                 st.markdown(f"**Confidence:** {confidence_level}")
                 st.caption(confidence_explanation)
 
@@ -686,12 +696,14 @@ def project_overview_tab():
                         display_name, description, is_vendor = get_model_display_info(weights_path)
                         model_name = model_dir.name
                         is_default = MODEL_DESCRIPTIONS.get(model_name, {}).get("is_default", False)
-                        all_models.append((weights_path, display_name, description, is_vendor, is_default))
+                        all_models.append(
+                            (weights_path, display_name, description, is_vendor, is_default)
+                        )
 
         # Sort default model first, then other vendor models, then user models (alphabetically within groups)
         all_models.sort(key=lambda x: (not x[4], not x[3], x[1].lower()))
 
-        for weights_path, display_name, description, is_vendor, is_default in all_models:
+        for weights_path, display_name, _description, is_vendor, _is_default in all_models:
             available_models.append(weights_path)
             prefix = VENDOR_MODEL_PREFIX if is_vendor else USER_MODEL_PREFIX
             model_options.append(f"{prefix}{display_name}")
@@ -715,12 +727,11 @@ def project_overview_tab():
 
         st.caption(f"*{description}*")
 
-        if selected_path != current_weights:
-            if st.button("Load selected model", type="primary"):
-                st.session_state.current_weights = selected_path
-                st.session_state.pop("model", None)
-                st.success(f"Switched to: {display_name}")
-                st.rerun()
+        if selected_path != current_weights and st.button("Load selected model", type="primary"):
+            st.session_state.current_weights = selected_path
+            st.session_state.pop("model", None)
+            st.success(f"Switched to: {display_name}")
+            st.rerun()
     else:
         st.warning("No checkpoints found")
 

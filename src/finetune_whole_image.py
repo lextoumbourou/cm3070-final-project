@@ -272,8 +272,8 @@ def main():
     print(f"Validation samples: {len(val_dataset)}")
 
     train_labels = [label for _, label in train_dataset.samples]
-    n_benign = sum(1 for l in train_labels if l == 0)
-    n_malignant = sum(1 for l in train_labels if l == 1)
+    n_benign = sum(1 for label in train_labels if label == 0)
+    n_malignant = sum(1 for label in train_labels if label == 1)
     print(f"Training distribution: Benign={n_benign}, Malignant={n_malignant}")
 
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)

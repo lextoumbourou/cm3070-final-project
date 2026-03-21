@@ -318,15 +318,15 @@ def main():
         train_all_df, val_ratio=args.val_ratio, random_state=args.random_seed
     )
 
-    train_metadata = process_and_save_split(
+    process_and_save_split(
         train_df, "train", metadata_df, img_output_dir, output_root,
         mode=args.mode, target_size=args.target_size
     )
-    val_metadata = process_and_save_split(
+    process_and_save_split(
         val_df, "val", metadata_df, img_output_dir, output_root,
         mode=args.mode, target_size=args.target_size
     )
-    test_metadata = process_and_save_split(
+    process_and_save_split(
         test_df, "test", metadata_df, img_output_dir, output_root,
         mode=args.mode, target_size=args.target_size
     )
