@@ -61,3 +61,22 @@ class TestComputeMetrics:
         metrics = compute_metrics(probs, labels)
         assert metrics['sensitivity'] == pytest.approx(0.0)
         assert metrics['specificity'] == pytest.approx(1.0)
+
+
+class TestGetInferenceTransform:
+
+    """Tests for get_inference_transform function."""
+
+    def test_default_output_size(self):
+        """Image is stretched to default."""
+        transform = get_inference_transform()
+        img = np.zeros((500, 400, 3), dtype=np.uint8)
+        result = transform(image=img)['image']
+        assert result.shape == (896, 1152, 3)
+
+    def test_custom_output_size(self):
+        """Image is resized based on input params."""
+        transform = get_inference_transform(target_height=224, target_width=224)
+        img = np.zeros((500, 400, 3), dtype=np.uint8)
+        result = transform(image=img)['image']
+        assert result.shape == (224, 224, 3)
