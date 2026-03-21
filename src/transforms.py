@@ -32,6 +32,7 @@ def get_train_transform(
         A.HorizontalFlip(p=0.5),
         A.VerticalFlip(p=0.5),
         A.Rotate(limit=25, p=0.5, border_mode=cv2.BORDER_CONSTANT),
+        A.RandomScale(scale_limit=0.2, p=0.5),
         A.RandomBrightnessContrast(brightness_limit=0.08, contrast_limit=0.2, p=0.5),
         A.Resize(height=height, width=width),
     ])

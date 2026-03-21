@@ -9,8 +9,6 @@ import csv
 import time
 from pathlib import Path
 
-import albumentations as A
-import cv2
 import mlx.core as mx
 import mlx.nn as nn
 import mlx.optimizers as optim
@@ -21,23 +19,7 @@ from PIL import Image
 
 import wandb
 from src.models.whole_image_classifier import create_whole_image_classifier
-
-
-def get_train_transform(target_height=896, target_width=1152):
-    return A.Compose([
-        A.HorizontalFlip(p=0.5),
-        A.VerticalFlip(p=0.5),
-        A.Rotate(limit=25, p=0.5, border_mode=cv2.BORDER_CONSTANT),
-        A.RandomScale(scale_limit=0.2, p=0.5),
-        A.RandomBrightnessContrast(brightness_limit=0.08, contrast_limit=0.2, p=0.5),
-        A.Resize(height=target_height, width=target_width),
-    ])
-
-
-def get_val_transform(target_height=896, target_width=1152):
-    return A.Compose([
-        A.Resize(height=target_height, width=target_width),
-    ])
+from src.transforms import get_inference_transform, get_train_transform
 
 
 class WholeImageDataset(Dataset):
@@ -268,7 +250,7 @@ def main():
 
     print("Loading datasets...")
     train_transform = get_train_transform(args.target_height, args.target_width)
-    val_transform = get_val_transform(args.target_height, args.target_width)
+    val_transform = get_inference_transform(args.target_height, args.target_width)
 
     train_dataset = WholeImageDataset(str(TRAIN_CSV), str(IMG_DIR), train_transform)
     val_dataset = WholeImageDataset(str(VAL_CSV), str(IMG_DIR), val_transform)
