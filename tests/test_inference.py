@@ -80,3 +80,23 @@ class TestGetInferenceTransform:
         img = np.zeros((500, 400, 3), dtype=np.uint8)
         result = transform(image=img)['image']
         assert result.shape == (224, 224, 3)
+
+
+class TestGetTtaTransforms:
+
+    """Tests for get_tta_transforms function."""
+
+    def test_all_variants_produce_correct_size(self):
+        """Check each TTA variant resizes to the target dimensions."""
+        transforms = get_tta_transforms(target_height=224, target_width=224)
+        img = np.zeros((500, 400, 3), dtype=np.uint8)
+        for t in transforms:
+            result = t(image=img)['image']
+            assert result.shape == (224, 224, 3)
+
+    def test_variants_produce_different_outputs(self):
+        """Basic test to ensure flipped variants are different from original."""
+        transforms = get_tta_transforms(target_height=224, target_width=224)
+        img = np.arange(224 * 224 * 3, dtype=np.uint8).reshape(224, 224, 3)
+        results = [t(image=img)['image'] for t in transforms]
+        assert not all(np.array_equal(results[0], r) for r in results[1:])
