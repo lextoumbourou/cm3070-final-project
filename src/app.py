@@ -5,8 +5,6 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import albumentations as A
-import cv2
 import mlx.core as mx
 import mlx.nn as nn
 import mlx.optimizers as optim
@@ -22,10 +20,15 @@ from mlxim.data import DataLoader
 from mlxim.data._base import Dataset
 
 from src.models.whole_image_classifier import create_whole_image_classifier
+from src.transforms import (
+    DEFAULT_HEIGHT,
+    DEFAULT_WIDTH,
+    get_inference_transform,
+    get_train_transform,
+    preprocess_image,
+)
 
 DEFAULT_WEIGHTS = "checkpoints/default/cbis-whole-wd-only/best_model.safetensors"
-TARGET_HEIGHT = 896
-TARGET_WIDTH = 1152
 
 # Emoji prefixes for model selection UI
 VENDOR_MODEL_PREFIX = "📦 "
@@ -118,20 +121,6 @@ def load_model(weights_path):
     return model
 
 
-def get_transform():
-    return A.Compose([A.Resize(height=TARGET_HEIGHT, width=TARGET_WIDTH)])
-
-
-def get_train_transform():
-    return A.Compose([
-        A.HorizontalFlip(p=0.5),
-        A.VerticalFlip(p=0.5),
-        A.Rotate(limit=25, p=0.5, border_mode=cv2.BORDER_CONSTANT),
-        A.RandomBrightnessContrast(brightness_limit=0.08, contrast_limit=0.2, p=0.5),
-        A.Resize(height=TARGET_HEIGHT, width=TARGET_WIDTH),
-    ])
-
-
 def load_dicom(file_bytes):
     import tempfile
     with tempfile.NamedTemporaryFile(suffix=".dcm", delete=False) as tmp:
@@ -146,12 +135,6 @@ def load_dicom(file_bytes):
         pixel_array = np.stack([pixel_array] * 3, axis=-1)
     Path(tmp_path).unlink()
     return pixel_array
-
-
-def preprocess_image(img, transform):
-    img = transform(image=img)['image']
-    img = img.astype(np.float32) / 255.0
-    return mx.array(img)
 
 
 def run_inference(model, img):
@@ -375,7 +358,7 @@ def inference_tab():
             return
 
     model = st.session_state.model
-    transform = get_transform()
+    transform = get_inference_transform()
     model_info = get_model_display_info(weights_path)
 
     st.caption(f"Using model: **{model_info.name}**")
@@ -567,7 +550,7 @@ def finetune_tab():
                 stratified_train_val_split(benign_files, malignant_files, val_fraction=0.2)
 
             train_transform = get_train_transform()
-            val_transform = get_transform()
+            val_transform = get_inference_transform()
             train_dataset = FolderDataset(train_benign, train_malignant, train_transform)
             val_dataset = FolderDataset(val_benign, val_malignant, val_transform)
 
@@ -839,7 +822,7 @@ def project_overview_tab():
 
     with config_col2:
         st.markdown("**Settings**")
-        st.code(f"Image size: {TARGET_WIDTH} x {TARGET_HEIGHT}\nThreshold: 0.5")
+        st.code(f"Image size: {DEFAULT_WIDTH} x {DEFAULT_HEIGHT}\nThreshold: 0.5")
 
 
 def main():

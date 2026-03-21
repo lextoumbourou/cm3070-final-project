@@ -5,19 +5,13 @@ import csv
 import time
 from pathlib import Path
 
-import albumentations as A
 import mlx.core as mx
 import numpy as np
 from PIL import Image
 from sklearn.metrics import confusion_matrix, roc_auc_score
 
 from src.models.whole_image_classifier import create_whole_image_classifier
-
-
-def get_inference_transform(target_height=896, target_width=1152):
-    return A.Compose([
-        A.Resize(height=target_height, width=target_width),
-    ])
+from src.transforms import get_inference_transform, get_tta_transforms, preprocess_image
 
 
 def load_samples(csv_path):
@@ -29,28 +23,11 @@ def load_samples(csv_path):
     return samples
 
 
-def preprocess_image(img_path, transform):
+def load_and_preprocess(img_path, transform):
+    """Load image from path and preprocess for inference."""
     img = Image.open(img_path).convert('RGB')
     img = np.array(img).astype(np.uint8)
-    img = transform(image=img)['image']
-    img = img.astype(np.float32) / 255.0
-    return mx.array(img)
-
-
-def get_tta_transforms(target_height=896, target_width=1152):
-    """Get 4 TTA transform variants: original, h-flip, v-flip, both flips.
-
-    Following Shen et al. 2019: "horizontally and vertically flipping
-    an image to obtain four images and taking an average of the four
-    images' scores"
-    """
-    base_resize = A.Resize(height=target_height, width=target_width)
-    return [
-        A.Compose([base_resize]),  # Original
-        A.Compose([base_resize, A.HorizontalFlip(p=1.0)]),  # H-flip
-        A.Compose([base_resize, A.VerticalFlip(p=1.0)]),  # V-flip
-        A.Compose([base_resize, A.HorizontalFlip(p=1.0), A.VerticalFlip(p=1.0)]),  # Both
-    ]
+    return preprocess_image(img, transform)
 
 
 def run_inference(model, samples, img_dir, transform, batch_size=2, tta=False):
@@ -61,7 +38,7 @@ def run_inference(model, samples, img_dir, transform, batch_size=2, tta=False):
 
     if len(samples) > 0:
         filename, _ = samples[0]
-        img = preprocess_image(img_dir / filename, transform)
+        img = load_and_preprocess(img_dir / filename, transform)
         _ = model(mx.expand_dims(img, 0))
         mx.eval(_)
 
@@ -69,8 +46,8 @@ def run_inference(model, samples, img_dir, transform, batch_size=2, tta=False):
 
     if tta:
         tta_transforms = get_tta_transforms(
-            target_height=transform.transforms[0].height,
-            target_width=transform.transforms[0].width
+            height=transform.transforms[0].height,
+            width=transform.transforms[0].width
         )
         for i, (filename, label) in enumerate(samples):
             batch_start = time.time()
@@ -79,11 +56,7 @@ def run_inference(model, samples, img_dir, transform, batch_size=2, tta=False):
             img = Image.open(img_path).convert('RGB')
             img_np = np.array(img).astype(np.uint8)
 
-            variants = []
-            for tta_transform in tta_transforms:
-                augmented = tta_transform(image=img_np)['image']
-                augmented = augmented.astype(np.float32) / 255.0
-                variants.append(mx.array(augmented))
+            variants = [preprocess_image(img_np, tta_transform) for tta_transform in tta_transforms]
 
             inputs = mx.stack(variants)
             logits = model(inputs)
@@ -108,7 +81,7 @@ def run_inference(model, samples, img_dir, transform, batch_size=2, tta=False):
 
             for filename, label in batch_samples:
                 img_path = img_dir / filename
-                img = preprocess_image(img_path, transform)
+                img = load_and_preprocess(img_path, transform)
                 batch_images.append(img)
                 batch_labels.append(label)
 
