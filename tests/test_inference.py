@@ -7,11 +7,8 @@ Uses pytest style test.
 import numpy as np
 import pytest
 
-from src.inference_whole_image import (
-    compute_metrics,
-    get_inference_transform,
-    get_tta_transforms,
-)
+from src.inference_whole_image import compute_metrics
+from src.transforms import get_inference_transform, get_tta_transforms
 
 
 class TestComputeMetrics:
@@ -76,7 +73,7 @@ class TestGetInferenceTransform:
 
     def test_custom_output_size(self):
         """Image is resized based on input params."""
-        transform = get_inference_transform(target_height=224, target_width=224)
+        transform = get_inference_transform(height=224, width=224)
         img = np.zeros((500, 400, 3), dtype=np.uint8)
         result = transform(image=img)['image']
         assert result.shape == (224, 224, 3)
@@ -88,7 +85,7 @@ class TestGetTtaTransforms:
 
     def test_all_variants_produce_correct_size(self):
         """Check each TTA variant resizes to the target dimensions."""
-        transforms = get_tta_transforms(target_height=224, target_width=224)
+        transforms = get_tta_transforms(height=224, width=224)
         img = np.zeros((500, 400, 3), dtype=np.uint8)
         for t in transforms:
             result = t(image=img)['image']
@@ -96,7 +93,7 @@ class TestGetTtaTransforms:
 
     def test_variants_produce_different_outputs(self):
         """Basic test to ensure flipped variants are different from original."""
-        transforms = get_tta_transforms(target_height=224, target_width=224)
+        transforms = get_tta_transforms(height=224, width=224)
         img = np.arange(224 * 224 * 3, dtype=np.uint8).reshape(224, 224, 3)
         results = [t(image=img)['image'] for t in transforms]
         assert not all(np.array_equal(results[0], r) for r in results[1:])

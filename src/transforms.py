@@ -1,4 +1,5 @@
-"""Shared image transforms for mammography classification.
+"""
+Image transforms used for training and inference.
 
 Augmentation strategy follows Shen et al. (2019):
 "Deep Learning to Improve Breast Cancer Detection on Screening Mammography"
@@ -9,7 +10,7 @@ import cv2
 import mlx.core as mx
 import numpy as np
 
-# Default dimensions for whole image classification
+# Dimensions for whole image classification (2nd phase of pipeline).
 DEFAULT_HEIGHT = 896
 DEFAULT_WIDTH = 1152
 
@@ -40,10 +41,12 @@ def get_tta_transforms(
     height: int = DEFAULT_HEIGHT,
     width: int = DEFAULT_WIDTH,
 ) -> list[A.Compose]:
-    """Get test-time augmentation transforms.
+    """
+    Get test-time augmentation transforms.
 
     Returns 4 variants: original, h-flip, v-flip, both flips.
-    Following Shen et al. 2019: "horizontally and vertically flipping
+
+    Per Shen et al. 2019: "horizontally and vertically flipping
     an image to obtain four images and taking an average of the four
     images' scores"
     """
@@ -57,7 +60,8 @@ def get_tta_transforms(
 
 
 def preprocess_image(img: np.ndarray, transform: A.Compose) -> mx.array:
-    """Apply transform and convert to MLX array for inference.
+    """
+    Apply transform and convert to MLX array for inference.
 
     Args:
         img: Input image as numpy array (H, W, C) uint8
