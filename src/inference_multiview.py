@@ -2,7 +2,6 @@
 
 import argparse
 import csv
-import sys
 from pathlib import Path
 
 import albumentations as A
@@ -12,7 +11,6 @@ from PIL import Image
 from sklearn.metrics import confusion_matrix, roc_auc_score
 from tqdm import tqdm
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "vendor" / "mlx-image" / "src"))
 from src.models.whole_image_classifier import create_whole_image_classifier
 
 

@@ -11,17 +11,14 @@ Classes:
 
 import argparse
 import csv
-import sys
 from collections import Counter
 from pathlib import Path
 
+import albumentations as A
+import cv2
 import mlx.core as mx
 import mlx.nn as nn
 import mlx.optimizers as optim
-
-sys.path.insert(0, str(Path(__file__).parent.parent / "vendor" / "mlx-image" / "src"))
-import albumentations as A
-import cv2
 import numpy as np
 from mlxim.data import DataLoader
 from mlxim.data._base import Dataset

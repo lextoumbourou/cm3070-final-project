@@ -1,16 +1,13 @@
 import argparse
 import csv
-import sys
 from pathlib import Path
 
 import albumentations as A
 import mlx.core as mx
 import numpy as np
+from mlxim.model import create_model
 from PIL import Image
 from sklearn.metrics import confusion_matrix, roc_auc_score
-
-sys.path.insert(0, str(Path(__file__).parent.parent / "vendor" / "mlx-image" / "src"))
-from mlxim.model import create_model
 
 
 def get_inference_transform(output_size: int = 224):

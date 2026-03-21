@@ -16,17 +16,14 @@ Classes:
 
 import argparse
 import csv
-import sys
 from pathlib import Path
 
 import albumentations as A
 import mlx.core as mx
 import numpy as np
+from mlxim.model import create_model
 from PIL import Image
 from sklearn.metrics import confusion_matrix, roc_auc_score
-
-sys.path.insert(0, str(Path(__file__).parent.parent / "vendor" / "mlx-image" / "src"))
-from mlxim.model import create_model
 
 NUM_CLASSES = 5
 CLASS_NAMES = ["Background", "Benign mass", "Malignant mass", "Benign calc", "Malignant calc"]

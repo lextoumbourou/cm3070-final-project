@@ -9,13 +9,8 @@ Converts a patch classifier to a whole image classifier:
 4. Train on full mammograms (1152x896) with binary labels
 """
 
-import sys
-from pathlib import Path
-
 import mlx.core as mx
 import mlx.nn as nn
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "vendor" / "mlx-image" / "src"))
 from mlxim.model import create_model
 from mlxim.model.layers import AdaptiveAvgPool2d
 

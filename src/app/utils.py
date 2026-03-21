@@ -1,7 +1,6 @@
 """Utility functions for the mammogram classifier app."""
 
 import random
-import sys
 import tempfile
 from pathlib import Path
 
@@ -10,10 +9,10 @@ import mlx.nn as nn
 import mlx.optimizers as optim
 import numpy as np
 import pydicom
-from PIL import Image
-from sklearn.metrics import roc_auc_score
 from mlxim.data import DataLoader
 from mlxim.data._base import Dataset
+from PIL import Image
+from sklearn.metrics import roc_auc_score
 
 from src.app.types import (
     Classification,

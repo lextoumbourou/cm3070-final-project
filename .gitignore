@@ -4,5 +4,4 @@ datasets
 __pycache__
 *.egg-info
 wandb
-vendor
 .coverage
