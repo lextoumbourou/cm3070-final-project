@@ -9,6 +9,8 @@ from mlxim.model import create_model
 from PIL import Image
 from sklearn.metrics import confusion_matrix, roc_auc_score
 
+from src.display import print_divider, print_results_header
+
 
 def get_inference_transform(output_size: int = 224):
     """Get inference transform (resize only, no augmentation)."""
@@ -135,18 +137,16 @@ def main():
 
     metrics = compute_metrics(probs, labels, threshold=args.threshold)
 
-    print("\n" + "=" * 50)
-    print("RESULTS")
-    print("=" * 50)
+    print_results_header("RESULTS")
     print(f"AUC:         {metrics['auc']:.4f}")
     print(f"Sensitivity: {metrics['sensitivity']:.4f} (TPR, Recall)")
     print(f"Specificity: {metrics['specificity']:.4f} (TNR)")
     print(f"Accuracy:    {metrics['accuracy']:.4f}")
-    print("-" * 50)
+    print_divider("-")
     print(f"Confusion Matrix (threshold={args.threshold}):")
     print(f"  TP: {metrics['tp']:4d}  FN: {metrics['fn']:4d}")
     print(f"  FP: {metrics['fp']:4d}  TN: {metrics['tn']:4d}")
-    print("=" * 50)
+    print_divider()
 
 
 if __name__ == "__main__":

@@ -25,6 +25,8 @@ from mlxim.model import create_model
 from PIL import Image
 from sklearn.metrics import confusion_matrix, roc_auc_score
 
+from src.display import print_divider, print_section
+
 NUM_CLASSES = 5
 CLASS_NAMES = ["Background", "Benign mass", "Malignant mass", "Benign calc", "Malignant calc"]
 
@@ -235,23 +237,19 @@ def main():
         results['probs_5class']
     )
 
-    print("\n" + "=" * 60)
-    print("BINARY METRICS (Aggregated from 5-class predictions)")
-    print("=" * 60)
+    print_section("BINARY METRICS (Aggregated from 5-class predictions)")
     print("P(malignant) = P(malignant_mass) + P(malignant_calc)")
-    print("-" * 60)
+    print_divider("-")
     print(f"AUC:         {binary_metrics['auc']:.4f}")
     print(f"Sensitivity: {binary_metrics['sensitivity']:.4f} (TPR, Recall)")
     print(f"Specificity: {binary_metrics['specificity']:.4f} (TNR)")
     print(f"Accuracy:    {binary_metrics['accuracy']:.4f}")
-    print("-" * 60)
+    print_divider("-")
     print(f"Confusion Matrix (threshold={args.threshold}):")
     print(f"  TP: {binary_metrics['tp']:4d}  FN: {binary_metrics['fn']:4d}")
     print(f"  FP: {binary_metrics['fp']:4d}  TN: {binary_metrics['tn']:4d}")
 
-    print("\n" + "=" * 60)
-    print("5-CLASS PREDICTION DISTRIBUTION")
-    print("=" * 60)
+    print_section("5-CLASS PREDICTION DISTRIBUTION")
     total_benign = class_metrics['total_benign']
     print(f"\nFor BENIGN samples (n={total_benign}):")
     for class_name, count in class_metrics['benign_sample_predictions'].items():
@@ -264,7 +262,7 @@ def main():
         pct = 100 * count / total_malignant if total_malignant > 0 else 0
         print(f"  {class_name:20s}: {count:4d} ({pct:5.1f}%)")
 
-    print("=" * 60)
+    print_divider()
 
 
 if __name__ == "__main__":

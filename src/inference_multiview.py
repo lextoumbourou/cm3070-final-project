@@ -11,6 +11,7 @@ from PIL import Image
 from sklearn.metrics import confusion_matrix, roc_auc_score
 from tqdm import tqdm
 
+from src.display import print_divider, print_section
 from src.models.whole_image_classifier import create_whole_image_classifier
 
 
@@ -156,9 +157,7 @@ def main():
     spec_avg = tn / (tn + fp) if (tn + fp) > 0 else 0
     acc_avg = (tp + tn) / len(y_true)
 
-    print("\n" + "=" * 50)
-    print("IMAGE-LEVEL RESULTS")
-    print("=" * 50)
+    print_section("IMAGE-LEVEL RESULTS")
     print(f"Images: {len(samples)}")
 
     # Recalculate image-level AUC
@@ -167,23 +166,21 @@ def main():
     img_auc = roc_auc_score(img_labels, img_probs)
     print(f"AUC (image-level): {img_auc:.4f}")
 
-    print("\n" + "=" * 50)
-    print("BREAST-LEVEL RESULTS (Multi-view Fusion)")
-    print("=" * 50)
+    print_section("BREAST-LEVEL RESULTS (Multi-view Fusion)")
     print(f"Breasts: {len(breast_preds)}")
     print(f"  Benign: {sum(1 for label in y_true if label == 0)}")
     print(f"  Malignant: {sum(1 for label in y_true if label == 1)}")
-    print("-" * 50)
+    print_divider("-")
     print(f"AUC (avg fusion):  {auc_avg:.4f}")
     print(f"AUC (max fusion):  {auc_max:.4f}")
     print(f"Sensitivity (avg): {sens_avg:.4f}")
     print(f"Specificity (avg): {spec_avg:.4f}")
     print(f"Accuracy (avg):    {acc_avg:.4f}")
-    print("-" * 50)
+    print_divider("-")
     print("Confusion Matrix (avg, threshold=0.5):")
     print(f"  TP: {tp:4d}  FN: {fn:4d}")
     print(f"  FP: {fp:4d}  TN: {tn:4d}")
-    print("=" * 50)
+    print_divider()
 
 
 if __name__ == "__main__":

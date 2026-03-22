@@ -1,4 +1,10 @@
-"""Whole image trainer following Shen et al. (2019) two-stage approach."""
+"""
+Whole image trainer following Shen et al. (2019) two-stage approach.
+
+Sources:
+    - https://github.com/ml-explore/mlx-examples
+    - https://ml-explore.github.io/mlx/build/html/index.html
+"""
 
 import argparse
 import time
@@ -12,6 +18,7 @@ from mlxim.data import DataLoader
 
 import wandb
 from src.datasets import CSVDataset
+from src.display import print_divider, print_epoch_header, print_section
 from src.models.whole_image_classifier import create_whole_image_classifier
 from src.transforms import get_inference_transform, get_train_transform
 
@@ -125,8 +132,7 @@ class WholeImageTrainer:
         epoch_times = []
 
         for epoch in range(num_epochs):
-            print(f"\nEpoch {epoch + 1}/{num_epochs}")
-            print("-" * 50)
+            print_epoch_header(epoch + 1, num_epochs)
 
             if stage2_epoch is not None and epoch == stage2_epoch:
                 print(
@@ -288,16 +294,16 @@ def main():
     )
 
     print("\nTraining complete!")
-    print("\n" + "=" * 50)
-    print("TRAINING COMPUTATIONAL METRICS")
-    print("=" * 50)
+
+    print_section("TRAINING COMPUTATIONAL METRICS")
+
     total_hours = training_stats['total_time_sec'] / 3600
     print(f"Total training time: {training_stats['total_time_sec']:.1f}s ({total_hours:.2f} hours)")
     print(f"Average epoch time: {training_stats['avg_epoch_time']:.1f}s")
     print(f"Best validation AUC: {training_stats['best_val_auc']:.4f}")
     peak_mem = mx.get_peak_memory() / (1024**3)
     print(f"Peak memory usage: {peak_mem:.2f} GB")
-    print("=" * 50)
+    print_divider()
 
     print("\nEvaluating on test set...")
     TEST_CSV = DATA_DIR / "test.csv"

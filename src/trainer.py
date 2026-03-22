@@ -12,6 +12,7 @@ from mlxim.model import create_model
 
 import wandb
 from src.datasets import CSVDataset
+from src.display import print_divider, print_epoch_header, print_section
 from src.model_utils import freeze_backbone
 
 
@@ -174,8 +175,7 @@ class Trainer:
         epoch_times = []
 
         for epoch in range(num_epochs):
-            print(f"\nEpoch {epoch + 1}/{num_epochs}")
-            print("-" * 50)
+            print_epoch_header(epoch + 1, num_epochs)
 
             # Unfreeze and lower learning rate if specified
             if unfreeze_epoch is not None and epoch == unfreeze_epoch:
@@ -366,16 +366,15 @@ def main():
     )
 
     print("\nTraining complete!")
-    print("\n" + "=" * 50)
-    print("TRAINING COMPUTATIONAL METRICS")
-    print("=" * 50)
+
+    print_section("TRAINING COMPUTATIONAL METRICS")
     total_hours = training_stats['total_time_sec'] / 3600
     print(f"Total training time: {training_stats['total_time_sec']:.1f}s ({total_hours:.2f} hours)")
     print(f"Average epoch time: {training_stats['avg_epoch_time']:.1f}s")
     print(f"Best validation loss: {training_stats['best_val_loss']:.4f}")
     peak_mem = mx.get_peak_memory() / (1024**3)
     print(f"Peak memory usage: {peak_mem:.2f} GB")
-    print("=" * 50)
+    print_divider()
 
     print("\nRunning inference on test set...")
     test_dataset = CSVDataset(

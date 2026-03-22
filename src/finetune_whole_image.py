@@ -16,6 +16,7 @@ from mlxim.data import DataLoader
 
 import wandb
 from src.datasets import CSVDataset
+from src.display import print_divider, print_epoch_header, print_section
 from src.models.whole_image_classifier import create_whole_image_classifier
 from src.transforms import get_inference_transform, get_train_transform
 
@@ -124,8 +125,7 @@ class FineTuner:
         epoch_times = []
 
         for epoch in range(num_epochs):
-            print(f"\nEpoch {epoch + 1}/{num_epochs}")
-            print("-" * 50)
+            print_epoch_header(epoch + 1, num_epochs)
 
             if unfreeze_epoch is not None and epoch == unfreeze_epoch:
                 print(f"\n>>> Unfreezing backbone, LR={unfreeze_lr}, WD={unfreeze_wd}")
@@ -267,13 +267,12 @@ def main():
     )
 
     print("\nFine-tuning complete!")
-    print("\n" + "=" * 50)
-    print("TRAINING METRICS")
-    print("=" * 50)
+
+    print_section("TRAINING METRICS")
     total_hours = training_stats['total_time_sec'] / 3600
     print(f"Total time: {training_stats['total_time_sec']:.1f}s ({total_hours:.2f} hours)")
     print(f"Best validation AUC: {training_stats['best_val_auc']:.4f}")
-    print("=" * 50)
+    print_divider()
 
     print("\nEvaluating on test set...")
     TEST_CSV = DATA_DIR / "test.csv"

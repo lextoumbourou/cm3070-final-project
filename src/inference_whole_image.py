@@ -10,6 +10,7 @@ import numpy as np
 from PIL import Image
 from sklearn.metrics import confusion_matrix, roc_auc_score
 
+from src.display import print_divider, print_results_header, print_section
 from src.models.whole_image_classifier import create_whole_image_classifier
 from src.transforms import get_inference_transform, get_tta_transforms, preprocess_image
 
@@ -186,29 +187,25 @@ def main():
 
     metrics = compute_metrics(probs, labels, threshold=args.threshold)
 
-    print("\n" + "=" * 50)
-    print("RESULTS" + (" (with TTA)" if args.tta else ""))
-    print("=" * 50)
+    print_results_header("RESULTS" + (" (with TTA)" if args.tta else ""))
     print(f"AUC:         {metrics['auc']:.4f}")
     print(f"Sensitivity: {metrics['sensitivity']:.4f} (TPR, Recall)")
     print(f"Specificity: {metrics['specificity']:.4f} (TNR)")
     print(f"Accuracy:    {metrics['accuracy']:.4f}")
-    print("-" * 50)
+    print_divider("-")
     print(f"Confusion Matrix (threshold={args.threshold}):")
     print(f"  TP: {metrics['tp']:4d}  FN: {metrics['fn']:4d}")
     print(f"  FP: {metrics['fp']:4d}  TN: {metrics['tn']:4d}")
-    print("=" * 50)
+    print_divider()
 
-    print("\n" + "=" * 50)
-    print("INFERENCE COMPUTATIONAL METRICS")
-    print("=" * 50)
+    print_section("INFERENCE COMPUTATIONAL METRICS")
     print(f"Total inference time: {timing_stats['total_time_sec']:.2f}s")
     print(f"Number of samples: {timing_stats['num_samples']}")
     print(f"Average latency per image: {timing_stats['avg_latency_per_image_ms']:.1f}ms")
     print(f"Throughput: {timing_stats['throughput_img_per_sec']:.2f} images/sec")
     peak_mem = mx.get_peak_memory() / (1024**3)
     print(f"Peak memory usage: {peak_mem:.2f} GB")
-    print("=" * 50)
+    print_divider()
 
 
 if __name__ == "__main__":

@@ -7,6 +7,10 @@ Classes:
   2: Malignant mass
   3: Benign calcification
   4: Malignant calcification
+
+Sources:
+    - https://github.com/ml-explore/mlx-examples
+    - https://ml-explore.github.io/mlx/build/html/index.html
 """
 
 import argparse
@@ -22,6 +26,7 @@ from mlxim.model import create_model
 
 import wandb
 from src.datasets import CSVDataset
+from src.display import print_epoch_header
 from src.model_utils import freeze_backbone, freeze_backbone_except_top_n
 from src.transforms import get_patch_inference_transform, get_patch_train_transform
 
@@ -195,8 +200,7 @@ class MultiClassTrainer:
         best_val_loss = float('inf')
 
         for epoch in range(num_epochs):
-            print(f"\nEpoch {epoch + 1}/{num_epochs}")
-            print("-" * 50)
+            print_epoch_header(epoch + 1, num_epochs)
 
             if stage2_epoch is not None and epoch == stage2_epoch:
                 print(
