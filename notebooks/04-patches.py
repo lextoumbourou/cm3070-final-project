@@ -27,13 +27,12 @@
 import sys
 from pathlib import Path
 
-from PIL import Image
+import cv2
 import matplotlib.pyplot as plt
 import numpy as np
-import cv2
 import pandas as pd
-from pydantic import BaseModel
 import pydicom
+from pydantic import BaseModel
 
 # Add src to path for imports
 sys.path.insert(0, str(Path("..").resolve()))
@@ -507,6 +506,7 @@ ax.imshow(roi_mask, cmap='Reds', alpha=0.3)
 
 # Draw patch locations
 import matplotlib.patches as mpatches
+
 colors = plt.cm.viridis(np.linspace(0, 1, len(roi_patches)))
 
 for i, (patch, (px, py)) in enumerate(roi_patches):

@@ -24,13 +24,12 @@
 # ## Imports
 
 # %%
-from pathlib import Path
 import re
+from pathlib import Path
 
-import pandas as pd
 import matplotlib.pyplot as plt
-from PIL import Image
 import numpy as np
+import pandas as pd
 import pydicom
 from typedstream.stream import TypedStreamReader
 
@@ -404,6 +403,7 @@ plt.show()
 
 # %%
 from tqdm import tqdm
+
 
 def get_image_dimensions(df, dicom_dir, desc="Processing"):
     """Extract image dimensions for all DICOM images in a dataframe."""

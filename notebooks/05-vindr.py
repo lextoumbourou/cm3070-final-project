@@ -32,11 +32,11 @@
 # %%
 from pathlib import Path
 
-import pandas as pd
 import matplotlib.pyplot as plt
-from PIL import Image
 import numpy as np
+import pandas as pd
 from matplotlib.patches import Rectangle
+from PIL import Image
 
 # %% [markdown]
 # ## Dataset Overview
@@ -308,7 +308,7 @@ def get_image_path(row):
 # %%
 # Get a sample image with findings
 sample_with_finding = vindr_df[vindr_df['No_Finding'] == 0].iloc[0]
-print(f"Sample image with findings:")
+print("Sample image with findings:")
 print(f"  Patient ID: {sample_with_finding['patient_id']}")
 print(f"  Image ID: {sample_with_finding['image_id']}")
 print(f"  BI-RADS: {sample_with_finding['breast_birads']}")
@@ -419,6 +419,7 @@ if len(patients_with_both) > 0:
 # Sample a subset of images to check dimensions (avoid loading all images)
 from tqdm import tqdm
 
+
 def sample_image_dimensions(df, n_samples=100):
     """Sample image dimensions from the dataset."""
     sampled = df.drop_duplicates(subset=['image_id']).sample(n=min(n_samples, len(df)), random_state=42)
@@ -500,19 +501,19 @@ print(f"\nTotal annotations: {len(vindr_df)}")
 print(f"Total unique images: {len(unique_images)}")
 print(f"Total unique patients: {vindr_df['patient_id'].nunique()}")
 
-print(f"\n--- Split Distribution ---")
+print("\n--- Split Distribution ---")
 for split in vindr_df['split'].unique():
     n_patients = vindr_df[vindr_df['split'] == split]['patient_id'].nunique()
     n_images = unique_images[unique_images['split'] == split]['image_id'].nunique()
     print(f"  {split}: {n_patients} patients, {n_images} images")
 
-print(f"\n--- BI-RADS Distribution ---")
+print("\n--- BI-RADS Distribution ---")
 for birads in sorted(unique_images['breast_birads'].unique()):
     count = (unique_images['breast_birads'] == birads).sum()
     pct = count / len(unique_images) * 100
     print(f"  {birads}: {count} ({pct:.1f}%)")
 
-print(f"\n--- Finding Distribution ---")
+print("\n--- Finding Distribution ---")
 for col in finding_columns:
     count = (vindr_df[col] == 1).sum()
     if count > 0:

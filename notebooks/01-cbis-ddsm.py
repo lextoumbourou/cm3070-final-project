@@ -27,13 +27,13 @@
 # %%
 from pathlib import Path
 
-import pandas as pd
-import matplotlib.pyplot as plt
-import pydicom
-from PIL import Image
-import numpy as np
 import cv2
 import matplotlib.patches as patches
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import pydicom
+from PIL import Image
 from pydantic import BaseModel
 
 # %%
@@ -588,6 +588,7 @@ plt.show()
 
 # %%
 from tqdm import tqdm
+
 
 def get_image_dimensions(df, desc="Processing"):
     """Extract image dimensions for all images in a dataframe."""

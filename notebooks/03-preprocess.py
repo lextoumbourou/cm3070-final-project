@@ -21,19 +21,17 @@
 import sys
 from pathlib import Path
 
-from PIL import Image
+import cv2
+import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import numpy as np
-import cv2
-import albumentations as A
 import pandas as pd
-from pydantic import BaseModel
 import pydicom
-import matplotlib.patches as patches
+from pydantic import BaseModel
 
 # Add src to path for imports
 sys.path.insert(0, str(Path("..").resolve()))
-from src.transforms import get_patch_train_transform, get_patch_inference_transform
+from src.transforms import get_patch_inference_transform, get_patch_train_transform
 
 # %% [markdown]
 # ## Load Sample Image
