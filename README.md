@@ -53,7 +53,7 @@ uv sync
 To run the web-based interface, it can be run as follows:
 
 ```bash
-streamlit run src/app.py
+uv run streamlit run src/app.py
 ```
 
 The web-interface is comprised of 3 sections, separated by tabs:
