@@ -2,7 +2,6 @@ import argparse
 import csv
 from pathlib import Path
 
-import albumentations as A
 import mlx.core as mx
 import numpy as np
 from mlxim.model import create_model
@@ -10,13 +9,7 @@ from PIL import Image
 from sklearn.metrics import confusion_matrix, roc_auc_score
 
 from src.display import print_divider, print_results_header
-
-
-def get_inference_transform(output_size: int = 224):
-    """Get inference transform (resize only, no augmentation)."""
-    return A.Compose([
-        A.Resize(height=output_size, width=output_size),
-    ])
+from src.transforms import get_patch_inference_transform, preprocess_image
 
 
 def load_samples(csv_path: str):
@@ -28,18 +21,9 @@ def load_samples(csv_path: str):
     return samples
 
 
-def preprocess_image(img_path: Path, transform):
-    """Load and preprocess image using albumentations transform."""
-    img = Image.open(img_path).convert('RGB')
-    img = np.array(img).astype(np.uint8)
-    img = transform(image=img)['image']
-    img = img.astype(np.float32) / 255.0
-    return mx.array(img)
-
-
 def run_inference(model, samples, img_dir: Path, image_size: int = 224, batch_size: int = 32):
     model.eval()
-    transform = get_inference_transform(output_size=image_size)
+    transform = get_patch_inference_transform(output_size=image_size)
     all_probs = []
     all_labels = []
 
@@ -50,8 +34,9 @@ def run_inference(model, samples, img_dir: Path, image_size: int = 224, batch_si
 
         for filename, label in batch_samples:
             img_path = img_dir / filename
-            img = preprocess_image(img_path, transform)
-            batch_images.append(img)
+            img = Image.open(img_path).convert('RGB')
+            img_np = np.array(img).astype(np.uint8)
+            batch_images.append(preprocess_image(img_np, transform))
             batch_labels.append(label)
 
         inputs = mx.stack(batch_images)
