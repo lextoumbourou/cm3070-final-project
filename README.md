@@ -8,8 +8,8 @@ The aim of this project is demonstrate that we can build effective Breast Cancer
 
 The project comprises of two major parts:
 
-1. **Web-based Interface** - A web-based interface to support easy and accessible fine-tuning.
-2. **Model Training Scripts** - A series of scripts for training models and baselining different approachs to support our claims.
+1. **Model Training Scripts** - A series of scripts for training models and demonstrating the problem of domain shift.
+2. **Web-based Interface** - A web-based interface to support easy and accessible fine-tuning.
 
 ## Project Requirements
 
@@ -38,7 +38,7 @@ git lfs pull
 
 ### Python Dependencies
 
-We utilise `uv` throughout the project, as it provides one of the best tools for managing Python dependenices.
+Project utilises `uv` as it provides one of the best tools for managing Python dependenices.
 
 Uv can be installed following [these](https://docs.astral.sh/uv/getting-started/installation/) instructions.
 
