@@ -92,7 +92,11 @@ Download from https://drive.google.com/file/d/19n-p9p9C0eCQA1ybm6wkMo-bbeccT_62/
 
 ## Notebooks
 
+Run Jupyter Lab as follows:
+
+```bash
 uv run jupyter lab
+```
 
 ### [01-cbis-ddsm](notebooks/01-cbis-ddsm.ipynb)
 
