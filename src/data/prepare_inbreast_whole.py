@@ -37,7 +37,7 @@ def load_metadata() -> pd.DataFrame:
     logger.info("Loading INbreast metadata...")
     df = pd.read_csv(RAW_DATA_ROOT / "INbreast.csv", sep=";")
     df["pathology"] = df["Bi-Rads"].apply(classify_birads)
-    df = df[df["pathology"] != "Unknown"].reset_index(drop=True)
+    df = df.loc[df["pathology"] != "Unknown"].reset_index(drop=True)
 
     logger.info(f"Total images: {len(df)}")
     logger.info(f"Unique patients: {df['Patient ID'].nunique()}")
@@ -65,9 +65,9 @@ def split_data(
     n_test = int(n_total * test_ratio)
     n_val = int(n_total * val_ratio)
 
-    test_df = df_shuffled[:n_test].reset_index(drop=True)
-    val_df = df_shuffled[n_test:n_test + n_val].reset_index(drop=True)
-    train_df = df_shuffled[n_test + n_val:].reset_index(drop=True)
+    test_df = df_shuffled.iloc[:n_test].reset_index(drop=True)
+    val_df = df_shuffled.iloc[n_test:n_test + n_val].reset_index(drop=True)
+    train_df = df_shuffled.iloc[n_test + n_val:].reset_index(drop=True)
 
     logger.info(f"Split - Train: {len(train_df)}, Val: {len(val_df)}, Test: {len(test_df)}")
 
@@ -97,7 +97,7 @@ def process_case(
     target_width: int,
     target_height: int,
     crop_breast: bool
-) -> dict:
+) -> dict | None:
     file_name = str(row["File Name"])
     dicom_files = list(DICOM_DIR.rglob(f"{file_name}*.dcm"))
 
