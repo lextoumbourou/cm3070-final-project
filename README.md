@@ -94,23 +94,23 @@ Download from https://drive.google.com/file/d/19n-p9p9C0eCQA1ybm6wkMo-bbeccT_62/
 
 uv run jupyter lab
 
-### 01-cbis-ddsm
+### [01-cbis-ddsm](notebooks/01-cbis-ddsm.ipynb)
 
 EDA notebook for the CBIS-DDSM dataset.
 
-### 02-inbreast
+### [02-inbreast](notebooks/02-inbreast.ipynb)
 
 EDA notebook for the INBreast dataset.
 
-### 03-preprocess
+### [03-preprocess](notebooks/03-preprocess.ipynb)
 
 Preprocessing pipeline demonstrations.
 
-### 04-patches
+### [04-patches](notebooks/04-patches.ipynb)
 
 Patch extraction experiments.
 
-### 05-vindr
+### [05-vindr](notebooks/05-vindr.ipynb)
 
 EDA notebook for the VinDr Mammogram dataset.
 
