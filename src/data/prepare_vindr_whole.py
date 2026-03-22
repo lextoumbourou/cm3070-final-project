@@ -43,14 +43,14 @@ def load_metadata():
 
     unique_images = df.drop_duplicates(subset=['image_id']).copy()
     unique_images['pathology'] = unique_images['breast_birads'].apply(classify_birads)
-    unique_images = unique_images[unique_images['pathology'] != 'UNKNOWN']
+    unique_images = unique_images.loc[unique_images['pathology'] != 'UNKNOWN']
 
     logger.info(f"Total unique images: {len(unique_images)}")
     logger.info(f"  Benign: {(unique_images['pathology'] == 'BENIGN').sum()}")
     logger.info(f"  Malignant: {(unique_images['pathology'] == 'MALIGNANT').sum()}")
 
     for split in unique_images['split'].unique():
-        split_df = unique_images[unique_images['split'] == split]
+        split_df = unique_images.loc[unique_images['split'] == split]
         n_ben = (split_df['pathology'] == 'BENIGN').sum()
         n_mal = (split_df['pathology'] == 'MALIGNANT').sum()
         logger.info(f"  {split}: {len(split_df)} images (benign={n_ben}, malignant={n_mal})")
@@ -123,12 +123,12 @@ def main():
         df = df.head(args.max_images)
         logger.info(f"Limited to {args.max_images} images")
 
-    train_df = df[df['split'] == 'training'].copy()
-    test_df = df[df['split'] == 'test'].copy()
+    train_df = df.loc[df['split'] == 'training'].copy()
+    test_df = df.loc[df['split'] == 'test'].copy()
 
-    def balance_df(split_df, name):
-        benign = split_df[split_df['pathology'] == 'BENIGN']
-        malignant = split_df[split_df['pathology'] == 'MALIGNANT']
+    def balance_df(split_df: pd.DataFrame, name: str) -> pd.DataFrame:
+        benign = split_df.loc[split_df['pathology'] == 'BENIGN']
+        malignant = split_df.loc[split_df['pathology'] == 'MALIGNANT']
         n_minority = min(len(benign), len(malignant))
         benign_sampled = benign.sample(n=n_minority, random_state=42)
         malignant_sampled = malignant.sample(n=n_minority, random_state=42)
@@ -145,8 +145,8 @@ def main():
 
     train_df = train_df.sample(frac=1, random_state=42).reset_index(drop=True)
     n_val = int(len(train_df) * args.val_ratio)
-    val_df = train_df[:n_val].copy()
-    train_df = train_df[n_val:].copy()
+    val_df = train_df.iloc[:n_val].copy()
+    train_df = train_df.iloc[n_val:].copy()
 
     logger.info(f"Final split sizes: train={len(train_df)}, val={len(val_df)}, test={len(test_df)}")
 
