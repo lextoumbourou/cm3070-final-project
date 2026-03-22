@@ -170,11 +170,13 @@ uv run pytest tests/test_accessibility.py -v --no-cov
 
 This spins up the Streamlit app and checks each tab for WCAG violations using axe-core.
 
-Note: there are currently many violations that come from Streamlit's component library. See [issue](https://github.com/streamlit/streamlit/issues/8399).
+Note: there are currently many skipped violations that come from Streamlit's component library. See [issue](https://github.com/streamlit/streamlit/issues/8399).
 
 ## Linting
 
 This project uses [ruff](https://docs.astral.sh/ruff/) for linting and code formatting.
+
+Commands are as follows:
 
 ```bash
 # Check for lint errors
@@ -191,7 +193,8 @@ uv run ruff format .
 
 This project uses [pyright](https://microsoft.github.io/pyright/) for static type checking.
 
+Run as follows:
+
 ```bash
-# Run type checker
 uv run pyright src/
 ```
