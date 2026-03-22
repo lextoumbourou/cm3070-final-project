@@ -1,7 +1,9 @@
 """
 Fine-tune a pre-trained whole image classifier on a new dataset.
 
-Todo: comment and refactor.
+Sources:
+    - https://github.com/ml-explore/mlx-examples
+    - https://ml-explore.github.io/mlx/build/html/index.html
 """
 
 import argparse
@@ -21,8 +23,7 @@ from src.models.whole_image_classifier import create_whole_image_classifier
 from src.transforms import get_inference_transform, get_train_transform
 
 
-class FineTuner:
-    def __init__(self, model, optimizer):
+class FineTuner: def __init__(self, model, optimizer):
         self.model = model
         self.optimizer = optimizer
 

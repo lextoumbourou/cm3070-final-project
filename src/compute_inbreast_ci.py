@@ -9,27 +9,24 @@ Source: https://www.statsmodels.org/dev/generated/statsmodels.stats.proportion.p
 """
 
 import csv
-import sys
 from pathlib import Path
 
 import mlx.core as mx
-import numpy as np from PIL import Image
+import numpy as np
+from PIL import Image
 from sklearn.metrics import roc_auc_score
 from statsmodels.stats.proportion import proportion_confint
-
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent))
 
 from src.models.whole_image_classifier import create_whole_image_classifier
 from src.transforms import get_inference_transform, preprocess_image
 
-
-DATA_DIR = Path(__file__).parent / "datasets/prep/inbreast-whole"
+PROJECT_ROOT = Path(__file__).parent.parent
+DATA_DIR = PROJECT_ROOT / "datasets/prep/inbreast-whole"
 IMG_DIR = DATA_DIR / "img"
 
 MODELS = {
-    "before_finetune": Path(__file__).parent / "checkpoints/default/cbis-whole-wd-only/best_model.safetensors",
-    "after_finetune":  Path(__file__).parent / "checkpoints/default/inbreast-whole-finetune/best_model.safetensors",
+    "before_finetune": PROJECT_ROOT / "checkpoints/default/cbis-whole-wd-only/best_model.safetensors",
+    "after_finetune":  PROJECT_ROOT / "checkpoints/default/inbreast-whole-finetune/best_model.safetensors",
 }
 
 
