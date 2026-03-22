@@ -36,7 +36,8 @@ def get_largest_contour_bbox(mask: np.ndarray) -> tuple[int, int, int, int]:
         return (0, 0, mask.shape[1], mask.shape[0])
 
     largest = max(contours, key=cv2.contourArea)
-    return cv2.boundingRect(largest)
+    x, y, w, h = cv2.boundingRect(largest)
+    return (x, y, w, h)
 
 
 def get_breast_bbox(

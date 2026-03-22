@@ -21,6 +21,7 @@ from src.datasets import CSVDataset
 from src.display import print_divider, print_epoch_header, print_section
 from src.models.whole_image_classifier import create_whole_image_classifier
 from src.transforms import get_inference_transform, get_train_transform
+from src.types import BinaryValidationMetrics
 
 NUM_CLASSES = 2
 
@@ -80,13 +81,13 @@ class WholeImageTrainer:
             "epoch_time": epoch_time, "throughput": throughput
         }
 
-    def validate(self, val_loader):
+    def validate(self, val_loader) -> BinaryValidationMetrics:
         self.model.eval()
         total_loss = 0.0
         total_correct = 0
         total_samples = 0
-        all_probs = []
-        all_targets = []
+        all_probs: list[float] = []
+        all_targets: list[int] = []
 
         for inputs, targets in val_loader:
             logits = self.model(inputs)
@@ -113,13 +114,13 @@ class WholeImageTrainer:
         except Exception:
             auc = 0.0
 
-        return {
-            "val_loss": avg_loss,
-            "val_accuracy": accuracy,
-            "val_auc": auc,
-            "probs": all_probs,
-            "targets": all_targets
-        }
+        return BinaryValidationMetrics(
+            val_loss=avg_loss,
+            val_accuracy=accuracy,
+            val_auc=float(auc),
+            probs=all_probs,
+            targets=all_targets,
+        )
 
     def fit(self, train_loader, val_loader, num_epochs, checkpoint_dir=None,
             stage2_epoch=None, stage2_lr=None, stage2_weight_decay=None):
@@ -135,6 +136,7 @@ class WholeImageTrainer:
             print_epoch_header(epoch + 1, num_epochs)
 
             if stage2_epoch is not None and epoch == stage2_epoch:
+                assert stage2_lr is not None
                 print(
                     f"\n>>> Stage 2: Unfreezing backbone, LR={stage2_lr}, "
                     f"weight_decay={stage2_weight_decay}"
@@ -152,8 +154,8 @@ class WholeImageTrainer:
             print(f"  Epoch time: {epoch_time:.1f}s, Throughput: {throughput:.2f} img/s")
 
             val_metrics = self.validate(val_loader)
-            v_loss = val_metrics['val_loss']
-            v_acc, v_auc = val_metrics['val_accuracy'], val_metrics['val_auc']
+            v_loss = val_metrics.val_loss
+            v_acc, v_auc = val_metrics.val_accuracy, val_metrics.val_auc
             print(f"Validation - Loss: {v_loss:.4f}, Acc: {v_acc:.4f}, AUC: {v_auc:.4f}")
 
             peak_memory_gb = mx.get_peak_memory() / (1024**3)
@@ -166,9 +168,9 @@ class WholeImageTrainer:
                 "epoch": epoch + 1,
                 "train_loss": train_metrics['loss'],
                 "train_accuracy": train_metrics['accuracy'],
-                "val_loss": val_metrics['val_loss'],
-                "val_accuracy": val_metrics['val_accuracy'],
-                "val_auc": val_metrics['val_auc'],
+                "val_loss": val_metrics.val_loss,
+                "val_accuracy": val_metrics.val_accuracy,
+                "val_auc": val_metrics.val_auc,
                 "learning_rate": lr,
                 "epoch_time_sec": train_metrics['epoch_time'],
                 "throughput_img_per_sec": train_metrics['throughput'],
@@ -177,8 +179,8 @@ class WholeImageTrainer:
                 log_dict["peak_memory_gb"] = peak_memory_gb
             wandb.log(log_dict)
 
-            if checkpoint_dir and val_metrics['val_auc'] > best_val_auc:
-                best_val_auc = val_metrics['val_auc']
+            if checkpoint_dir and val_metrics.val_auc > best_val_auc:
+                best_val_auc = val_metrics.val_auc
                 checkpoint_path = checkpoint_dir / "best_model.safetensors"
                 self.model.save_weights(str(checkpoint_path))
                 print(f"Saved best model (AUC={best_val_auc:.4f}) to {checkpoint_path}")
@@ -319,14 +321,14 @@ def main():
 
     test_metrics = trainer.validate(test_loader)
     print("\nTest Results:")
-    print(f"  Loss: {test_metrics['val_loss']:.4f}")
-    print(f"  Accuracy: {test_metrics['val_accuracy']:.4f}")
-    print(f"  AUC: {test_metrics['val_auc']:.4f}")
+    print(f"  Loss: {test_metrics.val_loss:.4f}")
+    print(f"  Accuracy: {test_metrics.val_accuracy:.4f}")
+    print(f"  AUC: {test_metrics.val_auc:.4f}")
 
     final_log = {
-        "test_loss": test_metrics['val_loss'],
-        "test_accuracy": test_metrics['val_accuracy'],
-        "test_auc": test_metrics['val_auc'],
+        "test_loss": test_metrics.val_loss,
+        "test_accuracy": test_metrics.val_accuracy,
+        "test_auc": test_metrics.val_auc,
         "total_training_time_sec": training_stats['total_time_sec'],
         "total_training_time_hours": training_stats['total_time_sec'] / 3600,
         "avg_epoch_time_sec": training_stats['avg_epoch_time'],

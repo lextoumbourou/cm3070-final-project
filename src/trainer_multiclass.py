@@ -15,6 +15,7 @@ Sources:
 
 import argparse
 from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
 
 import mlx.core as mx
@@ -32,6 +33,16 @@ from src.transforms import get_patch_inference_transform, get_patch_train_transf
 
 NUM_CLASSES = 5
 CLASS_NAMES = ["Background", "Benign mass", "Malignant mass", "Benign calc", "Malignant calc"]
+
+
+@dataclass
+class ValidationMetrics:
+    val_loss: float
+    val_accuracy: float
+    per_class_accuracy: dict[str, float]
+    class_totals: list[int]
+    predictions: list[int]
+    targets: list[int]
 
 
 def compute_class_weights(dataset: CSVDataset) -> mx.array:
@@ -117,7 +128,7 @@ class MultiClassTrainer:
         avg_loss = total_loss / total_samples
         return {"loss": avg_loss}
 
-    def validate(self, val_loader) -> dict[str, float]:
+    def validate(self, val_loader) -> ValidationMetrics:
         """Validate and compute per-class metrics."""
         self.model.eval()
         total_loss = 0.0
@@ -165,14 +176,14 @@ class MultiClassTrainer:
             else:
                 per_class_acc[CLASS_NAMES[i]] = 0.0
 
-        return {
-            "val_loss": avg_loss,
-            "val_accuracy": accuracy,
-            "per_class_accuracy": per_class_acc,
-            "class_totals": class_total,
-            "predictions": all_predictions,
-            "targets": all_targets
-        }
+        return ValidationMetrics(
+            val_loss=avg_loss,
+            val_accuracy=accuracy,
+            per_class_accuracy=per_class_acc,
+            class_totals=class_total,
+            predictions=all_predictions,
+            targets=all_targets,
+        )
 
     def fit(
         self,
@@ -203,6 +214,8 @@ class MultiClassTrainer:
             print_epoch_header(epoch + 1, num_epochs)
 
             if stage2_epoch is not None and epoch == stage2_epoch:
+                assert stage2_unfreeze_layers is not None
+                assert stage2_lr is not None
                 print(
                     f"\n>>> Stage 2: Unfreezing top {stage2_unfreeze_layers} layers, LR={stage2_lr}"
                 )
@@ -210,6 +223,7 @@ class MultiClassTrainer:
                 self.optimizer = optim.Adam(learning_rate=stage2_lr)
 
             if stage3_epoch is not None and epoch == stage3_epoch:
+                assert stage3_lr is not None
                 print(f"\n>>> Stage 3: Unfreezing all layers, LR={stage3_lr}")
                 self.model.unfreeze()
                 self.optimizer = optim.Adam(learning_rate=stage3_lr)
@@ -220,30 +234,30 @@ class MultiClassTrainer:
 
             # Validation
             val_metrics = self.validate(val_loader)
-            print(f"Validation Loss: {val_metrics['val_loss']:.4f}")
-            print(f"Validation Accuracy: {val_metrics['val_accuracy']:.4f}")
+            print(f"Validation Loss: {val_metrics.val_loss:.4f}")
+            print(f"Validation Accuracy: {val_metrics.val_accuracy:.4f}")
             print("Per-class accuracy:")
-            for class_name, acc in val_metrics['per_class_accuracy'].items():
+            for class_name, acc in val_metrics.per_class_accuracy.items():
                 print(f"  {class_name}: {acc:.4f}")
 
             log_dict = {
                 "epoch": epoch + 1,
                 "train_loss": train_metrics['loss'],
-                "val_loss": val_metrics['val_loss'],
-                "val_accuracy": val_metrics['val_accuracy'],
+                "val_loss": val_metrics.val_loss,
+                "val_accuracy": val_metrics.val_accuracy,
                 "learning_rate": (
                     self.optimizer.learning_rate.item()
                     if hasattr(self.optimizer.learning_rate, 'item')
                     else self.optimizer.learning_rate
                 )
             }
-            for class_name, acc in val_metrics['per_class_accuracy'].items():
+            for class_name, acc in val_metrics.per_class_accuracy.items():
                 log_dict[f"val_acc_{class_name.replace(' ', '_')}"] = acc
 
             wandb.log(log_dict)
 
-            if checkpoint_dir and val_metrics['val_loss'] < best_val_loss:
-                best_val_loss = val_metrics['val_loss']
+            if checkpoint_dir and val_metrics.val_loss < best_val_loss:
+                best_val_loss = val_metrics.val_loss
                 checkpoint_path = checkpoint_dir / "best_model.npz"
                 self.model.save_weights(str(checkpoint_path))
                 print(f"Saved best model to {checkpoint_path}")
@@ -447,18 +461,18 @@ def main():
     test_metrics = trainer.validate(test_loader)
     print()
     print("Test Results:")
-    print(f"  Test Loss: {test_metrics['val_loss']:.4f}")
-    print(f"  Test Accuracy: {test_metrics['val_accuracy']:.4f}")
+    print(f"  Test Loss: {test_metrics.val_loss:.4f}")
+    print(f"  Test Accuracy: {test_metrics.val_accuracy:.4f}")
     print("  Per-class accuracy:")
-    for class_name, acc in test_metrics['per_class_accuracy'].items():
+    for class_name, acc in test_metrics.per_class_accuracy.items():
         print(f"    {class_name}: {acc:.4f}")
 
     # Log test metrics
     test_log = {
-        "test_loss": test_metrics['val_loss'],
-        "test_accuracy": test_metrics['val_accuracy']
+        "test_loss": test_metrics.val_loss,
+        "test_accuracy": test_metrics.val_accuracy
     }
-    for class_name, acc in test_metrics['per_class_accuracy'].items():
+    for class_name, acc in test_metrics.per_class_accuracy.items():
         test_log[f"test_acc_{class_name.replace(' ', '_')}"] = acc
 
     wandb.log(test_log)
