@@ -88,8 +88,8 @@ def split_by_patient(
         unique_patients, test_size=val_ratio, random_state=random_state
     )
 
-    train_df = df[df["patient_id"].isin(train_patients)].reset_index(drop=True)
-    val_df = df[df["patient_id"].isin(val_patients)].reset_index(drop=True)
+    train_df = df.loc[df["patient_id"].isin(train_patients)].reset_index(drop=True)
+    val_df = df.loc[df["patient_id"].isin(val_patients)].reset_index(drop=True)
 
     logger.info(
         f"Split patients - Train: {len(train_patients)}, Val: {len(val_patients)}"
@@ -165,7 +165,7 @@ def preprocess_mammogram(
 
 def load_full_image(row: pd.Series, metadata_df: pd.DataFrame) -> np.ndarray | None:
     """Load full mammogram image from DICOM."""
-    image_path_str = row["image file path"]
+    image_path_str = str(row["image file path"])
     try:
         dcm_data = parse_dcm_path(image_path_str)
         dicom_path = resolve_dcm_path(dcm_data, metadata_df, DATASET_ROOT)

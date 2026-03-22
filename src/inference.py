@@ -12,7 +12,7 @@ from src.display import print_divider, print_results_header
 from src.transforms import get_patch_inference_transform, preprocess_image
 
 
-def load_samples(csv_path: str):
+def load_samples(csv_path: Path):
     samples = []
     with open(csv_path) as f:
         reader = csv.DictReader(f)

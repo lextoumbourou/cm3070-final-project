@@ -41,7 +41,7 @@ def get_inference_transform(output_size: int = 224):
     ])
 
 
-def load_samples(csv_path: str):
+def load_samples(csv_path: Path):
     """Load samples from CSV file."""
     samples = []
     with open(csv_path) as f:

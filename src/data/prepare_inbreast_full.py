@@ -1,6 +1,7 @@
 import argparse
 import logging
 from pathlib import Path
+from typing import cast
 
 import cv2
 import numpy as np
@@ -27,7 +28,7 @@ def load_metadata() -> pd.DataFrame:
     df = pd.read_csv(RAW_DATA_ROOT / "INbreast.csv", sep=";")
 
     df["pathology"] = df["Bi-Rads"].apply(classify_birads)
-    df = df[df["pathology"] != "Unknown"].reset_index(drop=True)
+    df = df.loc[df["pathology"] != "Unknown"].reset_index(drop=True)
 
     logger.info(f"Total images: {len(df)}")
     logger.info(f"Unique patients: {df['Patient ID'].nunique()}")
@@ -55,9 +56,9 @@ def split_data(
     n_test = int(n_total * test_ratio)
     n_val = int(n_total * val_ratio)
 
-    test_df = df_shuffled[:n_test].reset_index(drop=True)
-    val_df = df_shuffled[n_test:n_test + n_val].reset_index(drop=True)
-    train_df = df_shuffled[n_test + n_val:].reset_index(drop=True)
+    test_df = df_shuffled.iloc[:n_test].reset_index(drop=True)
+    val_df = df_shuffled.iloc[n_test:n_test + n_val].reset_index(drop=True)
+    train_df = df_shuffled.iloc[n_test + n_val:].reset_index(drop=True)
 
     logger.info(f"Split cases - Train: {len(train_df)}, Val: {len(val_df)}, Test: {len(test_df)}")
 
@@ -118,7 +119,7 @@ def preprocess_mammogram(img_array, target_size=TARGET_SIZE):
     return img_final
 
 
-def process_case(row: pd.Series, output_dir: Path, case_idx: int) -> dict:
+def process_case(row: pd.Series, output_dir: Path, case_idx: int) -> dict | None:
     file_name = str(row["File Name"])
     dicom_files = list(DICOM_DIR.rglob(f"{file_name}*.dcm"))
 
@@ -171,7 +172,7 @@ def process_and_save_split(
     for idx, row in tqdm(
         split_df.iterrows(), total=len(split_df), desc=f"Processing {split_name}"
     ):
-        metadata = process_case(row, img_output_dir, idx)
+        metadata = process_case(row, img_output_dir, cast(int, idx))
         if metadata is not None:
             processed_cases.append(metadata)
 

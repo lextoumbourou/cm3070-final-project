@@ -33,7 +33,7 @@ import matplotlib.patches as patches
 
 # Add src to path for imports
 sys.path.insert(0, str(Path("..").resolve()))
-from src.trainer import get_train_transform, get_val_transform
+from src.transforms import get_patch_train_transform, get_patch_inference_transform
 
 # %% [markdown]
 # ## Load Sample Image
@@ -211,7 +211,7 @@ img_rgb = np.stack([img_normalized] * 3, axis=-1)
 # then resized to 224x224 for model input.
 
 # %%
-train_transform = get_train_transform(aug_size=512, output_size=224)
+train_transform = get_patch_train_transform(output_size=224)
 
 # %%
 # Show multiple augmented versions
@@ -232,7 +232,7 @@ plt.show()
 # For validation/inference, only resize is applied (no augmentation).
 
 # %%
-val_transform = get_val_transform(output_size=224)
+val_transform = get_patch_inference_transform(output_size=224)
 
 fig, axes = plt.subplots(1, 2, figsize=(10, 5))
 

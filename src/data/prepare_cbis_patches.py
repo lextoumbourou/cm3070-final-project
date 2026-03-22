@@ -84,8 +84,8 @@ def split_by_patient(
         unique_patients, test_size=val_ratio, random_state=random_state
     )
 
-    train_df = df[df["patient_id"].isin(train_patients)].reset_index(drop=True)
-    val_df = df[df["patient_id"].isin(val_patients)].reset_index(drop=True)
+    train_df = df.loc[df["patient_id"].isin(train_patients)].reset_index(drop=True)
+    val_df = df.loc[df["patient_id"].isin(val_patients)].reset_index(drop=True)
 
     logger.info(
         f"Split patients - Train: {len(train_patients)}, Val: {len(val_patients)}"
@@ -257,7 +257,7 @@ def extract_roi_patches(
             if pad_left > 0 or pad_top > 0 or pad_right > 0 or pad_bottom > 0:
                 patch = cv2.copyMakeBorder(
                     patch, pad_top, pad_bottom, pad_left, pad_right,
-                    cv2.BORDER_CONSTANT, value=0
+                    cv2.BORDER_CONSTANT, value=(0, 0, 0)
                 )
 
             if patch.shape[0] != patch_size or patch.shape[1] != patch_size:
@@ -314,7 +314,8 @@ def extract_background_patches(
     valid_mask = cv2.erode(valid_mask, kernel_erode, iterations=1)
 
     # Find valid positions
-    valid_points = np.where(valid_mask > 0)
+    valid_mask_arr: np.ndarray = np.asarray(valid_mask)
+    valid_points = np.where(valid_mask_arr > 0)
     if len(valid_points[0]) == 0:
         logger.warning("No valid background positions found")
         return patches
@@ -368,7 +369,7 @@ def extract_background_patches(
             patch = cv2.copyMakeBorder(
                 patch,
                 pad_top, pad_bottom, pad_left, pad_right,
-                cv2.BORDER_CONSTANT, value=0
+                cv2.BORDER_CONSTANT, value=(0, 0, 0)
             )
 
         if patch.shape[0] != patch_size or patch.shape[1] != patch_size:
@@ -383,7 +384,7 @@ def extract_background_patches(
     return patches
 
 
-def group_abnormalities_by_image(df: pd.DataFrame) -> dict[tuple, pd.DataFrame]:
+def group_abnormalities_by_image(df: pd.DataFrame) -> dict:
     """
     Group all abnormalities that belong to the same mammogram image.
 
@@ -404,7 +405,7 @@ def group_abnormalities_by_image(df: pd.DataFrame) -> dict[tuple, pd.DataFrame]:
 
 def load_full_image(row: pd.Series, metadata_df: pd.DataFrame) -> np.ndarray | None:
     """Load full mammogram image from DICOM using metadata lookup."""
-    image_path_str = row["image file path"]
+    image_path_str = str(row["image file path"])
     try:
         dcm_data = parse_dcm_path(image_path_str)
         dicom_path = resolve_dcm_path(dcm_data, metadata_df, DATASET_ROOT)
@@ -423,10 +424,11 @@ def load_full_image(row: pd.Series, metadata_df: pd.DataFrame) -> np.ndarray | N
 def load_roi_mask(row: pd.Series, metadata_df: pd.DataFrame) -> np.ndarray | None:
     """Load ROI mask from DICOM using metadata lookup."""
     try:
-        mask_path_str = row.get("ROI mask file path")
-        if pd.isna(mask_path_str):
+        mask_path_value = row.get("ROI mask file path")
+        if mask_path_value is None or pd.isna(mask_path_value):
             return None
 
+        mask_path_str = str(mask_path_value)
         dcm_data = parse_dcm_path(mask_path_str)
         dicom_path = resolve_dcm_path(dcm_data, metadata_df, DATASET_ROOT)
         if not dicom_path.exists():
@@ -586,7 +588,8 @@ def process_and_save_split(
         class_names = ["Background", "Benign mass", "Malignant mass",
                        "Benign calc", "Malignant calc"]
         logger.info(f"{split_name} class distribution:")
-        for label, count in class_counts.items():
+        for label in class_counts.index:
+            count = class_counts[label]
             logger.info(f"  {class_names[label]}: {count}")
 
     return result_df, current_idx
