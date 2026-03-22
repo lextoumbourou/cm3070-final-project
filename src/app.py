@@ -7,6 +7,19 @@ import numpy as np
 import streamlit as st
 from PIL import Image
 
+from src.app.content import (
+    DATASET_CONFIG_DESCRIPTION,
+    FINETUNE_DESCRIPTION,
+    FOLDER_STRUCTURE_HELP,
+    INFO_SET_TEST_FOLDER,
+    INFO_SET_TRAIN_FOLDER,
+    PROJECT_OVERVIEW_DESCRIPTION,
+    USER_MODEL_PREFIX,
+    VENDOR_MODEL_PREFIX,
+    WARNING_EXTREME_PREDICTION,
+    WARNING_LOW_IMAGE_COUNT,
+    format_result_guidance,
+)
 from src.app.types import Classification
 from src.app.utils import (
     FolderDataset,
@@ -29,9 +42,6 @@ from src.transforms import (
 )
 
 DEFAULT_WEIGHTS = "checkpoints/default/cbis-whole-wd-only/best_model.safetensors"
-
-VENDOR_MODEL_PREFIX = "📦 "
-USER_MODEL_PREFIX = "👤 "
 
 TRAINING_PRESETS = {
     "Quick": {"epochs": 5, "stage1_epochs": 2},
@@ -125,7 +135,7 @@ def inference_tab():
 
         st.divider()
     else:
-        st.info("💡 Set a test folder in **Project Overview** to enable batch evaluation.")
+        st.info(INFO_SET_TEST_FOLDER)
         st.divider()
 
     # Single Image Inference.
@@ -176,25 +186,19 @@ def inference_tab():
 
                 # Warn about potential out-of-distribution inputs
                 if result.malignant_prob < 0.01 or result.malignant_prob > 0.99:
-                    st.warning(
-                        "**Extreme prediction detected.** "
-                        "Please verify this is a valid mammogram image. "
-                        "Non-mammography images may produce misleading results."
-                    )
+                    st.warning(WARNING_EXTREME_PREDICTION)
 
 
 def finetune_tab():
     st.header("Fine-tune Model")
-    st.markdown("""
-    Adapt the model to your local imaging equipment by fine-tuning on your own labeled data.
-    """)
+    st.markdown(FINETUNE_DESCRIPTION)
 
     # Use train folder from Project Overview
     folder_path = st.session_state.get("train_folder", "")
     stats = st.session_state.get("train_stats", None)
 
     if not folder_path or not stats:
-        st.info("💡 Set a training folder in **Project Overview** first.")
+        st.info(INFO_SET_TRAIN_FOLDER)
         return
 
     st.markdown(f"**Training folder:** `{folder_path}`")
@@ -205,7 +209,7 @@ def finetune_tab():
     col3.metric("Total", stats.total)
 
     if stats.total < 10:
-        st.warning("Consider adding more images for better fine-tuning results (recommended: 50+)")
+        st.warning(WARNING_LOW_IMAGE_COUNT)
 
     st.divider()
 
@@ -326,53 +330,18 @@ def finetune_tab():
         # Result interpretation and guidance
         st.divider()
         auc = val_metrics.auc
+        title, message = format_result_guidance(auc, stats)
 
         if auc >= 0.80:
-            st.success(
-                "**Good results.** The fine-tuned model shows strong performance on your data."
-            )
-            st.markdown("""
-            The model is ready for use. You can now:
-            - Switch to this model in the Project Overview tab
-            - Use it for inference on new images
-            """)
+            st.success(title)
         elif auc >= 0.70:
-            st.info("**Reasonable results.** The model shows moderate performance.")
-            st.markdown("""
-            **Suggestions to improve:**
-            - Add more training images (especially for the minority class)
-            - Try the **Thorough** preset for longer training
-            - Ensure consistent image quality across your dataset
-            """)
+            st.info(title)
         elif auc >= 0.60:
-            cases_to_add = "malignant" if stats.malignant < stats.benign else "benign"
-            st.warning("**Suboptimal results.** Performance is below typical clinical thresholds.")
-            st.markdown(f"""
-            **Possible causes:**
-            - Too few training images (current: {stats.total}, recommended: 50+)
-            - Class imbalance (benign: {stats.benign}, malignant: {stats.malignant})
-            - Inconsistent image quality or labelling errors
-
-            **Recommendations:**
-            - Add more labelled images, especially {cases_to_add} cases
-            - Try the **Thorough** preset
-            - Review your labels for accuracy
-            """)
+            st.warning(title)
         else:
-            st.error("**Poor results.** The model is performing near random chance.")
-            st.markdown(f"""
-            **This may indicate:**
-            - Insufficient training data (current: {stats.total} images)
-            - Severe class imbalance
-            - Data quality issues or labelling errors
-            - The base model may not be suitable for your imaging equipment
+            st.error(title)
 
-            **Recommendations:**
-            - Significantly increase your dataset size (aim for 100+ images)
-            - Balance your classes (similar numbers of benign and malignant)
-            - Verify all labels are correct
-            - Try training with the **Thorough** preset
-            """)
+        st.markdown(message)
 
         st.divider()
         if st.button("Use this model for inference", type="primary"):
@@ -383,9 +352,7 @@ def finetune_tab():
 
 def project_overview_tab():
     st.header("Project Overview")
-    st.markdown("""
-    Configure your model and datasets here before running inference or fine-tuning.
-    """)
+    st.markdown(PROJECT_OVERVIEW_DESCRIPTION)
 
     current_weights = st.session_state.get("current_weights", DEFAULT_WEIGHTS)
 
@@ -454,20 +421,8 @@ def project_overview_tab():
 
     # Dataset Selection.
     st.subheader("2. Configure Datasets (Optional)")
-    st.markdown("""
-    Set your training and test data folders here for batch inference and fine-tuning.
-
-    **Required folder structure:**
-    ```
-    your_folder/
-    ├── benign/
-    │   ├── image1.png
-    │   └── ...
-    └── malignant/
-        ├── image1.png
-        └── ...
-    ```
-    """)
+    st.markdown(DATASET_CONFIG_DESCRIPTION)
+    st.markdown(FOLDER_STRUCTURE_HELP)
 
     col1, col2 = st.columns(2)
 
