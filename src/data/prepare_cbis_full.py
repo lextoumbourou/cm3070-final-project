@@ -15,6 +15,7 @@ Supports two modes:
 import argparse
 import logging
 from pathlib import Path
+from typing import cast
 
 import cv2
 import numpy as np
@@ -99,8 +100,8 @@ def split_by_patient(
         unique_patients, test_size=val_ratio, random_state=random_state
     )
 
-    train_df = df[df["patient_id"].isin(train_patients)].reset_index(drop=True)
-    val_df = df[df["patient_id"].isin(val_patients)].reset_index(drop=True)
+    train_df = df.loc[df["patient_id"].isin(train_patients)].reset_index(drop=True)
+    val_df = df.loc[df["patient_id"].isin(val_patients)].reset_index(drop=True)
 
     logger.info(
         f"Split patients - Train: {len(train_patients)}, Val: {len(val_patients)}"
@@ -137,7 +138,7 @@ def process_case(
     case_idx: int,
     mode: str = "full",
     target_size: int = TARGET_SIZE,
-) -> dict:
+) -> dict | None:
     """
     Process a single case.
 
@@ -146,7 +147,7 @@ def process_case(
               "roi" for pre-cropped ROI abnormality images
     """
     path_key = "image file path" if mode == "full" else "cropped image file path"
-    image_path_str = row[path_key]
+    image_path_str = cast(str, row[path_key])
 
     try:
         dcm_data = parse_dcm_path(image_path_str)
@@ -240,9 +241,10 @@ def process_and_save_split(
     for idx, row in tqdm(
         split_df.iterrows(), total=len(split_df), desc=f"Processing {split_name}"
     ):
-        abnormality_category = row["abnormality_category"]
+        abnormality_category = cast(str, row["abnormality_category"])
+        case_idx = cast(int, idx)
         metadata = process_case(
-            row, metadata_df, abnormality_category, img_output_dir, idx,
+            row, metadata_df, abnormality_category, img_output_dir, case_idx,
             mode=mode, target_size=target_size
         )
 
